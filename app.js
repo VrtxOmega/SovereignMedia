@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const chapterDrawer = document.getElementById('chapter-drawer');
     const chapterDrawerClose = document.getElementById('chapter-drawer-close');
     const chapterDrawerList = document.getElementById('chapter-drawer-list');
-    const visualizerCanvas = document.getElementById('detail-visualizer');
+    let visualizerCanvas = document.getElementById('detail-visualizer');
     const iconPlay = playBtn.querySelector('.icon-play');
     const iconPause = playBtn.querySelector('.icon-pause');
 
@@ -75,7 +75,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let activeTrackIndex = -1;
     let isPlaying = false;
     let playSpeed = 1.0;
-    const speeds = [1.0, 1.25, 1.5, 1.75, 2.0];
+    const speeds = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+    let currentChapters = []; // M4B chapters from ffprobe
 
     // Sort & Group state
     let currentSort = 'title';
@@ -113,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cy = H / 2;
         const bufferLen = analyser.frequencyBinCount;
         const dataArr = new Uint8Array(bufferLen);
-        const baseRadius = 72;
+        const baseRadius = 90;
 
         function draw() {
             visualizerRafId = requestAnimationFrame(draw);
@@ -126,12 +127,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (let i = 0; i < bufferLen; i++) sum += dataArr[i];
             const avg = sum / bufferLen / 255;
 
+            // Outer glow pulse
+            ctx.beginPath();
+            ctx.arc(cx, cy, baseRadius + 8 + avg * 20, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.04 + avg * 0.12})`;
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
             // Draw radial frequency ring
             const sliceAngle = (Math.PI * 2) / bufferLen;
             ctx.beginPath();
             for (let i = 0; i < bufferLen; i++) {
                 const amplitude = dataArr[i] / 255;
-                const r = baseRadius + amplitude * 28;
+                const r = baseRadius + amplitude * 45;
                 const angle = i * sliceAngle - Math.PI / 2;
                 const x = cx + Math.cos(angle) * r;
                 const y = cy + Math.sin(angle) * r;
@@ -139,14 +147,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 else ctx.lineTo(x, y);
             }
             ctx.closePath();
-            ctx.strokeStyle = `rgba(212, 175, 55, ${0.15 + avg * 0.5})`;
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.25 + avg * 0.5})`;
+            ctx.lineWidth = 2.5;
             ctx.stroke();
 
             // Inner glow ring
             ctx.beginPath();
-            ctx.arc(cx, cy, baseRadius - 2 + avg * 6, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(212, 175, 55, ${0.05 + avg * 0.2})`;
+            ctx.arc(cx, cy, baseRadius - 4 + avg * 8, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.08 + avg * 0.25})`;
             ctx.lineWidth = 2;
             ctx.stroke();
         }
@@ -405,14 +413,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Cover art in hero header + ghost background
         const coverUrl = toFileUrl(album.coverArt);
         if (coverUrl) {
-            detailCoverArt.innerHTML = `<img src="${coverUrl}" alt="">`;
+            detailCoverArt.innerHTML = `<canvas class="detail-visualizer" id="detail-visualizer" width="300" height="300"></canvas><img src="${coverUrl}" alt="">`;
             detailHeroBg.style.backgroundImage = `url('${coverUrl}')`;
             detailGhostBg.style.backgroundImage = `url('${coverUrl}')`;
         } else {
-            detailCoverArt.innerHTML = '<span class="detail-cover-fallback">Ω</span>';
+            detailCoverArt.innerHTML = '<canvas class="detail-visualizer" id="detail-visualizer" width="300" height="300"></canvas><span class="detail-cover-fallback">Ω</span>';
             detailHeroBg.style.backgroundImage = 'none';
             detailGhostBg.style.backgroundImage = 'none';
         }
+        // Re-acquire canvas reference after innerHTML replacement
+        visualizerCanvas = document.getElementById('detail-visualizer');
 
         // Track count + total duration
         const totalSecs = album.tracks.reduce((s, t) => s + (t.duration || 0), 0);
@@ -457,17 +467,79 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ── Chapter Drawer ──────────────────────────────────────────────────
-    chapterBtn.addEventListener('click', () => {
+    chapterBtn.addEventListener('click', async () => {
         chapterDrawer.classList.toggle('hidden');
         if (!chapterDrawer.classList.contains('hidden')) {
-            renderChapterDrawer();
+            await loadAndRenderChapters();
         }
     });
     chapterDrawerClose.addEventListener('click', () => {
         chapterDrawer.classList.add('hidden');
     });
 
-    function renderChapterDrawer() {
+    async function loadAndRenderChapters() {
+        chapterDrawerList.innerHTML = '<div style="padding:20px;color:var(--text-tertiary);font-size:12px;">Loading chapters…</div>';
+        if (!currentAlbumData) return;
+
+        // For single-track albums (M4B audiobooks), try ffprobe chapter extraction
+        if (currentAlbumData.tracks.length === 1) {
+            const filePath = currentAlbumData.tracks[0].path;
+            try {
+                const chapters = await window.omega.file.getChapters(filePath);
+                if (chapters && chapters.length > 0) {
+                    currentChapters = chapters;
+                    renderM4BChapters();
+                    return;
+                }
+            } catch (e) {
+                console.error('Chapter extraction failed:', e);
+            }
+        }
+
+        // Fallback: render track-based chapters
+        currentChapters = [];
+        renderTrackChapters();
+    }
+
+    function renderM4BChapters() {
+        chapterDrawerList.innerHTML = '';
+        const currentTime = audioEl.currentTime || 0;
+
+        currentChapters.forEach((ch, index) => {
+            const item = document.createElement('div');
+            item.className = 'chapter-drawer-item';
+
+            // Highlight current chapter based on playback position
+            if (activeAlbumId === currentAlbumData.id &&
+                currentTime >= ch.start && currentTime < ch.end) {
+                item.classList.add('active');
+            }
+
+            item.innerHTML = `
+                <span class="chapter-num">${index + 1}</span>
+                <div class="chapter-info">
+                    <span class="chapter-title">${ch.title}</span>
+                    <span class="chapter-time">${formatTime(ch.start)} — ${formatTime(ch.end)}</span>
+                </div>
+            `;
+            item.addEventListener('click', () => {
+                // Seek within the single M4B file
+                if (activeAlbumId !== currentAlbumData.id) {
+                    playLocalTrack(currentAlbumData.id, 0, ch.start);
+                } else {
+                    audioEl.currentTime = ch.start;
+                    if (!isPlaying) audioEl.play().catch(console.error);
+                }
+                setTimeout(() => renderM4BChapters(), 300);
+            });
+            chapterDrawerList.appendChild(item);
+        });
+
+        const activeItem = chapterDrawerList.querySelector('.active');
+        if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    function renderTrackChapters() {
         chapterDrawerList.innerHTML = '';
         if (!currentAlbumData) return;
 
@@ -491,15 +563,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             item.addEventListener('click', () => {
                 playLocalTrack(currentAlbumData.id, index);
-                renderChapterDrawer(); // refresh active state
+                setTimeout(() => renderTrackChapters(), 300);
             });
             chapterDrawerList.appendChild(item);
         });
 
-        // Auto-scroll to active chapter
         const activeItem = chapterDrawerList.querySelector('.active');
         if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
+
+    // ── Playback Speed with Pitch Correction ──────────────────────────
+    audioEl.preservesPitch = true;          // Chromium standard
+    audioEl.mozPreservesPitch = true;       // Firefox fallback
+    audioEl.webkitPreservesPitch = true;    // Webkit fallback
+
+    speedBtn.addEventListener('click', () => {
+        const currentIdx = speeds.indexOf(playSpeed);
+        playSpeed = speeds[(currentIdx + 1) % speeds.length];
+        audioEl.playbackRate = playSpeed;
+        speedBtn.textContent = playSpeed === 1.0 ? '1×' : `${playSpeed}×`;
+        speedBtn.classList.toggle('active', playSpeed !== 1.0);
+    });
 
     function renderDetailPlaylist() {
         detailPlaylist.innerHTML = '';
@@ -558,6 +642,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         audioEl.src = `file:///${track.path.replace(/\\/g, '/')}`;
         audioEl.addEventListener('loadedmetadata', function onLoad() {
             audioEl.removeEventListener('loadedmetadata', onLoad);
+            audioEl.playbackRate = playSpeed; // preserve speed across tracks
             if (resumeTime > 0) {
                 audioEl.currentTime = resumeTime;
             }
@@ -794,7 +879,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 prevBtn.click();
                 break;
             case 'Escape':
-                if (!detailContainer.classList.contains('hidden')) {
+                if (!chapterDrawer.classList.contains('hidden')) {
+                    chapterDrawer.classList.add('hidden');
+                } else if (!detailContainer.classList.contains('hidden')) {
                     detailBackBtn.click();
                 }
                 break;

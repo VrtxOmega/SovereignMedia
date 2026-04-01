@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 let mainWindow;
 
@@ -223,3 +224,34 @@ ipcMain.on('window:maximize', () => {
     else mainWindow?.maximize();
 });
 ipcMain.on('window:close', () => mainWindow?.close());
+
+// ── Chapter Extraction via ffprobe ───────────────────────────────────────
+ipcMain.handle('media:getChapters', async (_event, filePath) => {
+    return new Promise((resolve) => {
+        execFile('ffprobe', [
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_chapters',
+            filePath
+        ], { timeout: 15000 }, (err, stdout) => {
+            if (err) {
+                console.error('ffprobe chapter extraction failed:', err.message);
+                return resolve([]);
+            }
+            try {
+                const data = JSON.parse(stdout);
+                if (!data.chapters || data.chapters.length === 0) return resolve([]);
+                const chapters = data.chapters.map((ch, i) => ({
+                    index: i,
+                    title: (ch.tags && ch.tags.title) || `Chapter ${i + 1}`,
+                    start: parseFloat(ch.start_time) || 0,
+                    end: parseFloat(ch.end_time) || 0
+                }));
+                resolve(chapters);
+            } catch (e) {
+                console.error('ffprobe JSON parse error:', e.message);
+                resolve([]);
+            }
+        });
+    });
+});

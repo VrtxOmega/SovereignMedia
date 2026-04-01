@@ -165,11 +165,12 @@ body {
 }
 .media-local-header { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
 .media-local-folder-btn {
-    padding: 9px 16px; background: transparent;
+    padding: 8px 16px; background: transparent;
     border: 1px solid var(--border); border-radius: var(--radius);
     color: var(--text-tertiary); font-size: 12px; cursor: pointer;
     transition: all var(--transition); white-space: nowrap;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.3px; height: 34px;
+    display: flex; align-items: center; gap: 6px;
 }
 .media-local-folder-btn:hover {
     border-color: var(--border-gold); color: var(--gold); background: var(--gold-glow);
@@ -225,7 +226,8 @@ body {
     background: rgba(10, 10, 15, 0.85);
     backdrop-filter: blur(24px) saturate(120%);
     -webkit-backdrop-filter: blur(24px) saturate(120%);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.03);
     flex-shrink: 0; height: 96px;
     z-index: 10;
 }
@@ -306,6 +308,11 @@ body {
     font-family: var(--font-mono) !important; color: var(--text-tertiary) !important;
 }
 .media-speed-btn:hover { color: var(--gold) !important; }
+.media-speed-btn.active {
+    color: var(--gold) !important;
+    border-color: rgba(197, 160, 68, 0.4) !important;
+    background: var(--gold-glow) !important;
+}
 .media-sleep-btn { font-size: 13px !important; }
 .media-sleep-btn.active {
     border-color: rgba(197, 160, 68, 0.4) !important;
@@ -402,7 +409,7 @@ body {
     color: var(--text-secondary); font-size: 11px; font-family: var(--font-mono);
     padding: 7px 10px; cursor: pointer; outline: none;
     transition: all var(--transition); appearance: none;
-    -webkit-appearance: none;
+    -webkit-appearance: none; height: 34px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M4 5L0 0h8z' fill='rgba(255,255,255,0.3)'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
@@ -491,19 +498,21 @@ body {
 
 /* ══════════════════════════════════════════════════════════════
    8. ALBUM CARDS — Machined Glass
-   backdrop-filter glass, inset shadow on cover, kinetic hover.
+   will-change promotes to compositor layer, preventing repaint
+   flicker on integrated GPUs during hover transitions.
    ══════════════════════════════════════════════════════════════ */
 .library-card {
     position: relative;
-    background: rgba(20, 20, 25, 0.6);
+    background: rgba(20, 20, 25, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 8px; overflow: hidden;
     cursor: pointer;
-    transition: all 0.4s var(--ease);
+    transition: transform 0.35s var(--ease), border-color 0.35s var(--ease), box-shadow 0.35s var(--ease);
     display: flex; flex-direction: column;
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     animation: cardFadeIn 0.5s var(--ease) both;
     padding: 0;
+    will-change: transform;
+    contain: layout style paint;
 }
 @keyframes cardFadeIn {
     from { opacity: 0; transform: translateY(20px); }
@@ -511,10 +520,10 @@ body {
 }
 /* Kinetic Elevation on Hover */
 .library-card:hover {
-    transform: translateY(-8px) scale(1.02);
+    transform: translateY(-6px) scale(1.01);
     border-color: rgba(212, 175, 55, 0.4);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6),
-                0 0 15px rgba(212, 175, 55, 0.1);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5),
+                0 0 12px rgba(212, 175, 55, 0.08);
 }
 /* Now Playing indicator */
 .library-card.now-playing {
@@ -636,13 +645,14 @@ body {
     width: 160px; height: 160px; border-radius: 8px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    overflow: hidden; flex-shrink: 0;
+    overflow: visible; flex-shrink: 0;
     box-shadow:
         0 12px 40px rgba(0, 0, 0, 0.7),
         0 0 1px rgba(255, 255, 255, 0.06),
         inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     display: flex; align-items: center; justify-content: center;
     transition: box-shadow 0.4s var(--ease);
+    position: relative;
 }
 .detail-cover-art:hover {
     box-shadow:
@@ -650,7 +660,7 @@ body {
         0 0 20px rgba(212, 175, 55, 0.06),
         inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
-.detail-cover-art img { width: 100%; height: 100%; object-fit: cover; }
+.detail-cover-art img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; position: relative; z-index: 1; }
 .detail-cover-fallback {
     font-size: 52px; color: var(--gold); opacity: 0.06; font-weight: 700;
 }
@@ -684,18 +694,18 @@ body {
     letter-spacing: 0.8px;
 }
 
-/* Play/Resume button — precision-milled, tight glow */
+/* Play/Resume button — precision-milled, radiant gold glow */
 .detail-play-all-btn {
     margin-top: 12px; padding: 11px 32px; border: none;
-    background: var(--gold); color: var(--bg-base);
+    background: var(--gold); color: #1a1a1a;
     font-size: 13px; font-weight: 700; border-radius: 24px;
     cursor: pointer; transition: all 0.3s var(--ease);
     align-self: flex-start; letter-spacing: 0.4px;
-    box-shadow: 0 2px 6px rgba(197, 160, 68, 0.2);
+    box-shadow: 0 0 20px rgba(212, 168, 67, 0.2), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .detail-play-all-btn:hover {
-    background: var(--gold-bright);
-    box-shadow: 0 3px 10px rgba(197, 160, 68, 0.3);
+    background: var(--gold-bright); color: #111;
+    box-shadow: 0 0 28px rgba(212, 168, 67, 0.3), 0 3px 10px rgba(0, 0, 0, 0.3);
     transform: translateY(-1px);
 }
 
@@ -719,7 +729,7 @@ body {
     color: var(--text-primary);
 }
 .media-local-item.active {
-    background: rgba(255, 255, 255, 0.02);
+    background: linear-gradient(90deg, rgba(212, 168, 67, 0.06) 0%, transparent 100%);
     color: var(--gold);
     border-left-color: var(--gold);
 }
@@ -785,36 +795,28 @@ body {
 
 /* ══════════════════════════════════════════════════════════════
    11. AUDIO VISUALIZER — The Pulse
-   Subtle gold frequency line behind cover art.
+   Gold frequency ring behind cover art. Canvas sits inside
+   .detail-cover-art with absolute positioning.
    ══════════════════════════════════════════════════════════════ */
-.detail-cover-wrapper {
-    position: relative;
-    width: 200px; height: 200px;
-    flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-}
 .detail-visualizer {
-    position: absolute; inset: -20px;
-    width: 240px; height: 240px;
-    border-radius: 50%;
-    opacity: 0.7;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px; height: 300px;
+    opacity: 0.85;
     z-index: 0;
     pointer-events: none;
 }
-.detail-cover-wrapper .detail-cover-art {
-    position: relative; z-index: 1;
-    width: 160px; height: 160px;
-}
 
 /* ══════════════════════════════════════════════════════════════
-   12. GHOST BACKGROUND — Massive blurred album art texture
-   Fills the void with just enough album-specific color.
+   12. GHOST BACKGROUND — Visible blurred album art texture
+   Fills the void with album-specific color and texture.
    ══════════════════════════════════════════════════════════════ */
 .detail-ghost-bg {
     position: absolute; inset: 0;
     background-size: cover; background-position: center;
-    filter: blur(120px) brightness(0.08) saturate(0.2);
-    opacity: 0.05;
+    filter: blur(80px) brightness(0.18) saturate(0.25);
+    opacity: 0.15;
     transform: scale(1.5);
     z-index: 0;
     pointer-events: none;
@@ -825,6 +827,22 @@ body {
 }
 .library-detail-container > *:not(.detail-ghost-bg):not(.chapter-drawer) {
     position: relative; z-index: 1;
+}
+/* Pulsing Ω watermark in the detail void — depth via mask fade + blur */
+.library-detail-container::after {
+    content: 'Ω';
+    position: absolute;
+    bottom: -60px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 34vw; font-weight: 800;
+    color: rgba(212, 175, 55, 0.06);
+    pointer-events: none; z-index: 0;
+    line-height: 1;
+    animation: detailOmegaPulse 4s ease-in-out infinite;
+}
+@keyframes detailOmegaPulse {
+    0%, 100% { color: rgba(212, 175, 55, 0.04); }
+    50% { color: rgba(212, 175, 55, 0.09); }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -848,9 +866,12 @@ body {
 }
 
 .chapter-drawer {
-    position: absolute; top: 0; right: 0; bottom: 0;
-    width: 340px; z-index: 50;
-    background: rgba(8, 8, 12, 0.96);
+    position: fixed;
+    top: var(--titlebar-height);
+    right: 0;
+    bottom: 96px;
+    width: 340px; z-index: 200;
+    background: rgba(8, 8, 12, 0.97);
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
     display: flex; flex-direction: column;

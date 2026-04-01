@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('omega', {
     file: {
         openAudioFolder: () => ipcRenderer.invoke('media:openAudioFolder'),
         getLibrary: () => ipcRenderer.invoke('media:getLibrary'),
+        getChapters: (filePath) => ipcRenderer.invoke('media:getChapters', filePath),
     },
     window: {
         minimize: () => ipcRenderer.send('window:minimize'),
