@@ -55,6 +55,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sleepTimeRemaining = document.getElementById('sleep-time-remaining');
     const sleepOffBtn = document.getElementById('sleep-off-btn');
 
+    // ── New Elements ─────────────────────────────────────────────────────
+    const detailGhostBg = document.getElementById('detail-ghost-bg');
+    const chapterBtn = document.getElementById('detail-chapter-btn');
+    const chapterDrawer = document.getElementById('chapter-drawer');
+    const chapterDrawerClose = document.getElementById('chapter-drawer-close');
+    const chapterDrawerList = document.getElementById('chapter-drawer-list');
+    const visualizerCanvas = document.getElementById('detail-visualizer');
+    const iconPlay = playBtn.querySelector('.icon-play');
+    const iconPause = playBtn.querySelector('.icon-pause');
+
     // ── State ────────────────────────────────────────────────────────────
     let currentSource = 'local';
     let libraryData = null;
@@ -76,6 +86,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sleep timer state
     let sleepTimerId = null;
     let sleepEndTime = null;
+
+    // ── Web Audio API — The Pulse ────────────────────────────────────────
+    let audioCtx = null;
+    let analyser = null;
+    let audioSource = null;
+    let visualizerRafId = null;
+
+    function initAudioContext() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.82;
+        audioSource = audioCtx.createMediaElementSource(audioEl);
+        audioSource.connect(analyser);
+        analyser.connect(audioCtx.destination);
+    }
+
+    function startVisualizer() {
+        if (!analyser || !visualizerCanvas) return;
+        const ctx = visualizerCanvas.getContext('2d');
+        const W = visualizerCanvas.width;
+        const H = visualizerCanvas.height;
+        const cx = W / 2;
+        const cy = H / 2;
+        const bufferLen = analyser.frequencyBinCount;
+        const dataArr = new Uint8Array(bufferLen);
+        const baseRadius = 72;
+
+        function draw() {
+            visualizerRafId = requestAnimationFrame(draw);
+            analyser.getByteFrequencyData(dataArr);
+
+            ctx.clearRect(0, 0, W, H);
+
+            // Average amplitude for pulse intensity
+            let sum = 0;
+            for (let i = 0; i < bufferLen; i++) sum += dataArr[i];
+            const avg = sum / bufferLen / 255;
+
+            // Draw radial frequency ring
+            const sliceAngle = (Math.PI * 2) / bufferLen;
+            ctx.beginPath();
+            for (let i = 0; i < bufferLen; i++) {
+                const amplitude = dataArr[i] / 255;
+                const r = baseRadius + amplitude * 28;
+                const angle = i * sliceAngle - Math.PI / 2;
+                const x = cx + Math.cos(angle) * r;
+                const y = cy + Math.sin(angle) * r;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.15 + avg * 0.5})`;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Inner glow ring
+            ctx.beginPath();
+            ctx.arc(cx, cy, baseRadius - 2 + avg * 6, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.05 + avg * 0.2})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        draw();
+    }
+
+    function stopVisualizer() {
+        if (visualizerRafId) {
+            cancelAnimationFrame(visualizerRafId);
+            visualizerRafId = null;
+        }
+        if (visualizerCanvas) {
+            const ctx = visualizerCanvas.getContext('2d');
+            ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+        }
+    }
     let sleepDisplayId = null;
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -315,14 +402,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         detailAlbumTitle.textContent = album.name;
         detailAlbumArtist.textContent = album.artist;
 
-        // Cover art in hero header
+        // Cover art in hero header + ghost background
         const coverUrl = toFileUrl(album.coverArt);
         if (coverUrl) {
             detailCoverArt.innerHTML = `<img src="${coverUrl}" alt="">`;
             detailHeroBg.style.backgroundImage = `url('${coverUrl}')`;
+            detailGhostBg.style.backgroundImage = `url('${coverUrl}')`;
         } else {
             detailCoverArt.innerHTML = '<span class="detail-cover-fallback">Ω</span>';
             detailHeroBg.style.backgroundImage = 'none';
+            detailGhostBg.style.backgroundImage = 'none';
         }
 
         // Track count + total duration
@@ -362,9 +451,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         detailContainer.classList.add('hidden');
         gridContainer.classList.remove('hidden');
         searchContainer.classList.remove('hidden');
+        chapterDrawer.classList.add('hidden');
         currentAlbumData = null;
         renderLibrary(searchInput.value);
     });
+
+    // ── Chapter Drawer ──────────────────────────────────────────────────
+    chapterBtn.addEventListener('click', () => {
+        chapterDrawer.classList.toggle('hidden');
+        if (!chapterDrawer.classList.contains('hidden')) {
+            renderChapterDrawer();
+        }
+    });
+    chapterDrawerClose.addEventListener('click', () => {
+        chapterDrawer.classList.add('hidden');
+    });
+
+    function renderChapterDrawer() {
+        chapterDrawerList.innerHTML = '';
+        if (!currentAlbumData) return;
+
+        let cumulativeTime = 0;
+        currentAlbumData.tracks.forEach((track, index) => {
+            const item = document.createElement('div');
+            item.className = 'chapter-drawer-item';
+            if (activeAlbumId === currentAlbumData.id && activeTrackIndex === index) {
+                item.classList.add('active');
+            }
+
+            const startTime = cumulativeTime;
+            cumulativeTime += track.duration || 0;
+
+            item.innerHTML = `
+                <span class="chapter-num">${index + 1}</span>
+                <div class="chapter-info">
+                    <span class="chapter-title">${track.title}</span>
+                    <span class="chapter-time">${formatTime(startTime)} — ${formatTime(cumulativeTime)}</span>
+                </div>
+            `;
+            item.addEventListener('click', () => {
+                playLocalTrack(currentAlbumData.id, index);
+                renderChapterDrawer(); // refresh active state
+            });
+            chapterDrawerList.appendChild(item);
+        });
+
+        // Auto-scroll to active chapter
+        const activeItem = chapterDrawerList.querySelector('.active');
+        if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
 
     function renderDetailPlaylist() {
         detailPlaylist.innerHTML = '';
@@ -416,6 +551,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentAlbumData && currentAlbumData.id === albumId) {
             renderDetailPlaylist();
         }
+
+        // Init Web Audio API on first user-initiated play
+        initAudioContext();
 
         audioEl.src = `file:///${track.path.replace(/\\/g, '/')}`;
         audioEl.addEventListener('loadedmetadata', function onLoad() {
@@ -480,23 +618,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Audio Events ────────────────────────────────────────────────────
     audioEl.addEventListener('play', () => {
         isPlaying = true;
-        playBtn.innerHTML = '⏸';
+        iconPlay.classList.add('hidden');
+        iconPause.classList.remove('hidden');
         playBtn.classList.add('playing');
         coverArtBox.classList.add('playing');
         if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
             detailPlayAll.textContent = '⏸  Pause';
         }
+        startVisualizer();
+        if (!chapterDrawer.classList.contains('hidden')) renderChapterDrawer();
     });
 
     audioEl.addEventListener('pause', () => {
         isPlaying = false;
-        playBtn.innerHTML = '▶';
+        iconPlay.classList.remove('hidden');
+        iconPause.classList.add('hidden');
         playBtn.classList.remove('playing');
         coverArtBox.classList.remove('playing');
         savePosition();
         if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
             detailPlayAll.textContent = '▶  Resume';
         }
+        stopVisualizer();
     });
 
     audioEl.addEventListener('ended', () => {
@@ -506,9 +649,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             playLocalTrack(activeAlbumId, activeTrackIndex + 1);
         } else {
             isPlaying = false;
-            playBtn.innerHTML = '▶';
+            iconPlay.classList.remove('hidden');
+            iconPause.classList.add('hidden');
             playBtn.classList.remove('playing');
             coverArtBox.classList.remove('playing');
+            stopVisualizer();
         }
     });
 
