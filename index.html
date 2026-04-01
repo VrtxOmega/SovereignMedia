@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Audio Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- SVG Noise Texture — matte studio-hardware finish -->
+    <svg style="position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;" aria-hidden="true">
+        <filter id="noiseFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
+            <feColorMatrix type="saturate" values="0"/>
+        </filter>
+    </svg>
+    <div id="noise-overlay"></div>
+    <!-- ═══ Custom Titlebar ═══ -->
+    <div id="titlebar">
+        <div class="titlebar-left">
+            <span class="titlebar-icon">Ω</span>
+            <span class="titlebar-title">OMEGA AUDIO</span>
+        </div>
+        <div class="titlebar-center" id="titlebar-filepath"></div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="btn-minimize" title="Minimize">─</button>
+            <button class="titlebar-btn" id="btn-maximize" title="Maximize">□</button>
+            <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Close">✕</button>
+        </div>
+    </div>
+
+    <!-- ═══ Main App Container ═══ -->
+    <div id="app">
+        <div class="media-panel">
+            <!-- Source Toggle -->
+            <div class="media-source-toggle">
+                <button class="media-source-btn active" data-source="local" id="media-src-local">📁 Local Library</button>
+                <button class="media-source-btn" data-source="yt" id="media-src-yt">🎵 YouTube Music</button>
+            </div>
+
+            <!-- Webview container (for YouTube Music) -->
+            <div class="media-webview-container hidden" id="media-webview-container">
+                <webview id="media-wv-yt" partition="persist:media" 
+                         src="https://music.youtube.com"
+                         style="width:100%; height:100%; border:none;"></webview>
+            </div>
+
+            <!-- Local Files Panel -->
+            <div class="media-local-panel" id="media-local-panel">
+                <div class="media-local-header">
+                    <button class="media-local-folder-btn" id="media-local-folder">📂 Add/Refresh Library Folder</button>
+                    <div class="media-search-bar" id="library-search-container">
+                        <input type="text" class="media-search-input" id="media-search" placeholder="Search library..." />
+                        <span class="media-search-count" id="media-search-count"></span>
+                        <button class="media-search-clear hidden" id="media-search-clear">×</button>
+                    </div>
+                    <div class="media-sort-controls">
+                        <select class="media-sort-select" id="media-sort" title="Sort library">
+                            <option value="title">A → Z</option>
+                            <option value="author">Author</option>
+                            <option value="tracks-desc">Most Tracks</option>
+                            <option value="tracks-asc">Fewest Tracks</option>
+                        </select>
+                        <button class="media-group-btn" id="media-group-toggle" title="Group by Author">👤</button>
+                    </div>
+                </div>
+
+                <!-- 1. Grid View (Library Index) -->
+                <div class="library-grid-container" id="library-grid-container">
+                    <div class="playlist-empty" id="library-empty">
+                        <div class="empty-omega">Ω</div>
+                        <div>No library loaded.</div>
+                        <div style="font-size:12px; margin-top:4px;">Click "Add/Refresh Library Folder" to scan your files.</div>
+                    </div>
+                    <div class="library-grid" id="library-grid"></div>
+                </div>
+
+                <!-- 2. Detail / Now-Playing View -->
+                <div class="library-detail-container hidden" id="library-detail-container">
+                    <!-- Hero header with large cover art -->
+                    <div class="detail-hero" id="detail-hero">
+                        <div class="detail-hero-bg" id="detail-hero-bg"></div>
+                        <div class="detail-hero-content">
+                            <button class="detail-back-btn" id="detail-back-btn">← Back to Library</button>
+                            <div class="detail-hero-main">
+                                <div class="detail-cover-art" id="detail-cover-art">
+                                    <span class="detail-cover-fallback">Ω</span>
+                                </div>
+                                <div class="detail-text-info">
+                                    <h2 class="detail-album-title" id="detail-album-title">-</h2>
+                                    <div class="detail-album-artist" id="detail-album-artist">-</div>
+                                    <div class="detail-album-meta" id="detail-album-meta"></div>
+                                    <button class="detail-play-all-btn" id="detail-play-all">▶  Play</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Track list -->
+                    <div class="detail-tracklist-container">
+                        <div class="detail-tracklist" id="media-local-playlist"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer: Media Player Bar -->
+            <div class="media-player-bar" id="media-player-bar">
+                <!-- Track Info with Cover Art -->
+                <div class="media-track-info" id="media-track-info">
+                    <div class="media-cover-art" id="media-cover-art">
+                        <span class="media-cover-fallback">Ω</span>
+                        <img class="media-cover-img hidden" id="media-cover-img" alt="" />
+                    </div>
+                    <div class="media-track-text">
+                        <div class="media-track-title" id="media-track-title">No track playing</div>
+                        <div class="media-track-artist" id="media-track-artist">Select a file to play</div>
+                    </div>
+                </div>
+
+                <!-- Transport Controls -->
+                <div class="media-transport">
+                    <div class="media-controls">
+                        <button class="media-btn" id="media-prev" title="Previous (←)">«</button>
+                        <button class="media-btn media-btn-play" id="media-play" title="Play/Pause (Space)">▶</button>
+                        <button class="media-btn" id="media-next" title="Next (→)">»</button>
+                        <button class="media-btn media-speed-btn" id="media-speed" title="Playback Speed">1×</button>
+                        <button class="media-btn media-sleep-btn" id="media-sleep" title="Sleep Timer">🌙</button>
+                    </div>
+
+                    <!-- Seek bar -->
+                    <div class="media-seek" id="media-seek-area">
+                        <span class="media-seek-time" id="media-seek-cur">0:00</span>
+                        <input type="range" class="media-seek-slider" id="media-seek" min="0" max="1000" value="0" />
+                        <span class="media-seek-time" id="media-seek-dur">0:00</span>
+                    </div>
+                </div>
+
+                <!-- Volume + Sleep -->
+                <div class="media-volume-area">
+                    <div class="sleep-indicator hidden" id="sleep-indicator">
+                        <span class="sleep-icon">🌙</span>
+                        <span class="sleep-time" id="sleep-time-remaining">--:--</span>
+                    </div>
+                    <div class="media-volume">
+                        <span class="media-volume-icon" id="media-vol-icon">🔊</span>
+                        <input type="range" id="media-volume" class="media-volume-slider" min="0" max="100" value="70" />
+                        <span class="media-volume-val" id="media-vol-val">70</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden audio element -->
+            <audio id="media-local-audio" preload="auto"></audio>
+        </div>
+    </div>
+
+    <!-- Sleep Timer Dropdown -->
+    <div class="sleep-dropdown hidden" id="sleep-dropdown">
+        <div class="sleep-dropdown-title">Sleep Timer</div>
+        <button class="sleep-option" data-mins="15">15 minutes</button>
+        <button class="sleep-option" data-mins="30">30 minutes</button>
+        <button class="sleep-option" data-mins="45">45 minutes</button>
+        <button class="sleep-option" data-mins="60">1 hour</button>
+        <button class="sleep-option" data-mins="90">1.5 hours</button>
+        <button class="sleep-option sleep-option-off hidden" data-mins="0" id="sleep-off-btn">Cancel Timer</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
