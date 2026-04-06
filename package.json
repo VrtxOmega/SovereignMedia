@@ -1,16 +1,16 @@
 {
-  "name": "sovereign-media",
-  "version": "2.0.0",
-  "description": "Sovereign Media — All-In-One Media Platform",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron ."
-  },
-  "dependencies": {
-    "adm-zip": "^0.5.17",
-    "electron": "^30.0.0",
-    "epubjs": "^0.3.93",
-    "music-metadata": "^11.12.3",
-    "video.js": "^8.23.7"
-  }
+    "name":  "sovereign-media",
+    "version":  "2.0.0",
+    "description":  "Sovereign Media — All-In-One Media Platform",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron ."
+                },
+    "dependencies":  {
+                         "adm-zip":  "^0.5.17",
+                         "electron":  "^30.0.0",
+                         "epubjs":  "^0.3.93",
+                         "music-metadata":  "^11.12.3",
+                         "video.js":  "^8.23.7"
+                     }
 }
