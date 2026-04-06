@@ -1,18 +1,30 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+    process.exit(0);
+}
+
 let mainWindow;
+let tray = null;
+let isQuitting = false;
 
 const dataPath = path.join(app.getPath('userData'), 'omega_audio_library.json');
 const coversDir = path.join(app.getPath('userData'), 'covers');
+const bookDataPath = path.join(app.getPath('userData'), 'sovereign_book_library.json');
+const bookCoversDir = path.join(app.getPath('userData'), 'book_covers');
+const videoDataPath = path.join(app.getPath('userData'), 'sovereign_video_library.json');
+const thumbsDir = path.join(app.getPath('userData'), 'thumbnails');
 
-// Ensure covers directory exists
-if (!fs.existsSync(coversDir)) {
-    fs.mkdirSync(coversDir, { recursive: true });
-}
+// Ensure data directories exist
+[coversDir, bookCoversDir, thumbsDir].forEach(dir => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
 
 async function getLibrary() {
     if (fs.existsSync(dataPath)) {
@@ -22,6 +34,15 @@ async function getLibrary() {
     }
     return null;
 }
+
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+});
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -35,6 +56,7 @@ function createWindow() {
             color: '#121216',
             symbolColor: '#c5a365'
         },
+        icon: path.join(__dirname, 'omega_audio.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -46,17 +68,85 @@ function createWindow() {
     });
 
     mainWindow.loadFile('index.html');
+
+    mainWindow.on('close', (event) => {
+        if (!isQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
+        }
+        return false;
+    });
+}
+
+function createTray() {
+    const iconPath = path.join(__dirname, 'omega_audio.ico');
+    // If the icon doesn't exist, we fallback to a nativeImage empty one, or standard electron icon
+    let trayIcon = nativeImage.createEmpty();
+    if (fs.existsSync(iconPath)) {
+        trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+    }
+    
+    tray = new Tray(trayIcon);
+    const contextMenu = Menu.buildFromTemplate([
+        { label: 'Show Player', click: () => mainWindow.show() },
+        { type: 'separator' },
+        { label: 'Quit Sovereign Media', click: () => {
+            isQuitting = true;
+            app.quit();
+        }}
+    ]);
+    tray.setToolTip('Sovereign Media');
+    tray.setContextMenu(contextMenu);
+
+    tray.on('click', () => {
+        if (mainWindow.isVisible()) {
+            mainWindow.hide();
+        } else {
+            mainWindow.show();
+        }
+    });
 }
 
 app.whenReady().then(() => {
     createWindow();
+    createTray();
+    
+    // ── Media Sync Daemon ────────────────────────────────────────
+    try {
+        const { spawn } = require('child_process');
+        const daemonPath = path.join('C:\\Veritas_Lab\\SovereignAudio\\backend', 'media_sync_daemon.py');
+        if (fs.existsSync(daemonPath)) {
+            let pythonExe = 'python';
+            
+            const syncDaemon = spawn(pythonExe, [daemonPath], { windowsHide: true, shell: true });
+            syncDaemon.stdout.on('data', d => console.log('[SYNC_DAEMON]', d.toString().trim()));
+            syncDaemon.stderr.on('data', d => console.error('[SYNC_DAEMON]', d.toString().trim()));
+            console.log(`[SovereignMedia] Spawning Media Sync Daemon: ${daemonPath}`);
+
+            // Spawn Localtunnel to ensure the WebSocket is accessible anywhere via HTTPS
+            const ngrokDaemon = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['localtunnel', '--port', '5002', '--subdomain', 'omega-audio-rlopez'], { windowsHide: true, shell: true });
+            ngrokDaemon.stdout.on('data', d => console.log('[CLOUD_TUNNEL]', d.toString().trim()));
+            ngrokDaemon.stderr.on('data', d => console.error('[CLOUD_TUNNEL]', d.toString().trim()));
+            console.log(`[SovereignMedia] Spawning Cloud Tunnel for Port 5002`);
+            
+            app.on('before-quit', () => {
+                isQuitting = true;
+                try { syncDaemon.kill(); } catch (e) {}
+                try { ngrokDaemon.kill(); } catch (e) {}
+            });
+        }
+    } catch (e) {
+        console.warn(`[SovereignMedia] Failed to spawn Media Sync and Cloud Tunnel: ${e.message}`);
+    }
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    // Only quit if not doing tray behavior, but we are doing tray behavior
+    // and isQuitting flag handles actual quitting.
 });
 
 // ── Helper: Save cover art as a file, return file:// path ────────────────
@@ -223,7 +313,44 @@ ipcMain.on('window:maximize', () => {
     if (mainWindow?.isMaximized()) mainWindow?.unmaximize();
     else mainWindow?.maximize();
 });
-ipcMain.on('window:close', () => mainWindow?.close());
+ipcMain.on('window:close', () => mainWindow?.hide());
+
+let preMiniBounds = null;
+ipcMain.on('window:setMiniMode', (event, mode) => {
+    if (!mainWindow) return;
+    if (mode === 'normal') {
+        mainWindow.setMinimumSize(500, 400);
+        if (preMiniBounds) {
+            mainWindow.setBounds(preMiniBounds);
+        } else {
+            mainWindow.setSize(1100, 850);
+        }
+        forceDragRegionRedraw();
+    } else if (mode === 'square') {
+        if (!preMiniBounds || mainWindow.getBounds().width > 400) preMiniBounds = mainWindow.getBounds();
+        mainWindow.setMinimumSize(280, 400);
+        mainWindow.setSize(280, 400);
+        forceDragRegionRedraw();
+    } else if (mode === 'ribbon') {
+        if (!preMiniBounds || mainWindow.getBounds().width > 550) preMiniBounds = mainWindow.getBounds();
+        mainWindow.setMinimumSize(600, 100);
+        mainWindow.setSize(600, 100);
+        forceDragRegionRedraw();
+    }
+});
+
+function forceDragRegionRedraw() {
+    if (!mainWindow) return;
+    // Chromium bug on Windows: Frameless window dragging breaks on programmatic resize.
+    // Hack: Force an infinitesimal bounds change to trigger a deep OS hit-test update.
+    setTimeout(() => {
+        try {
+            const b = mainWindow.getBounds();
+            mainWindow.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height + 1 });
+            mainWindow.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height });
+        } catch(e) {}
+    }, 50);
+}
 
 // ── Chapter Extraction via ffprobe ───────────────────────────────────────
 ipcMain.handle('media:getChapters', async (_event, filePath) => {
@@ -252,6 +379,339 @@ ipcMain.handle('media:getChapters', async (_event, filePath) => {
                 console.error('ffprobe JSON parse error:', e.message);
                 resolve([]);
             }
+        });
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── BOOK IPC Handlers ────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+async function getBookLibrary() {
+    if (fs.existsSync(bookDataPath)) {
+        try { return JSON.parse(fs.readFileSync(bookDataPath, 'utf8')); }
+        catch(e) {}
+    }
+    return null;
+}
+
+ipcMain.handle('books:getLibrary', async () => {
+    return await getBookLibrary();
+});
+
+ipcMain.handle('books:openFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory'],
+        title: 'Select eBook Folder'
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const startFolder = result.filePaths[0];
+    const books = [];
+    const AdmZip = require('adm-zip');
+    
+    // Load Delta Cache
+    const existingCache = await getBookLibrary() || [];
+    const cacheMap = new Map();
+    existingCache.forEach(b => cacheMap.set(b.id, b));
+
+    async function scanDir(dir) {
+        try {
+            const items = fs.readdirSync(dir, { withFileTypes: true });
+            let processCount = 0;
+            for (const item of items) {
+                const fullPath = path.join(dir, item.name);
+                if (item.isDirectory()) {
+                    await scanDir(fullPath);
+                } else if (item.isFile()) {
+                    const ext = path.extname(item.name).toLowerCase();
+                    if (ext === '.epub') {
+                        const stat = fs.statSync(fullPath);
+                        const id = crypto.createHash('sha256').update(fullPath).digest('hex').substring(0, 16);
+                        
+                        const cached = cacheMap.get(id);
+                        if (cached && cached.modified === stat.mtimeMs && cached.size === stat.size) {
+                            books.push(cached);
+                            continue; // Delta Cache HIT: Bypass AdmZip extraction entirely!
+                        }
+                        
+                        let fallbackTitle = item.name.replace(ext, '').replace(/_/g, ' ');
+                        let extractedTitle = fallbackTitle;
+                        let extractedAuthor = "Unknown Author";
+                        let extractedCoverPath = null;
+
+                        try {
+                            const zip = new AdmZip(fullPath);
+                            let opfPath = 'content.opf';
+                            const containerEntry = zip.getEntry('META-INF/container.xml');
+                            if (containerEntry) {
+                                const containerData = containerEntry.getData().toString('utf8');
+                                const match = containerData.match(/full-path=["']([^"']+\.opf)["']/i);
+                                if (match) opfPath = match[1];
+                            }
+                            const opfEntry = zip.getEntry(opfPath);
+                            if (opfEntry) {
+                                const opfData = opfEntry.getData().toString('utf8');
+                                const titleMatch = opfData.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/i);
+                                const creatorMatch = opfData.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/i);
+                                if (titleMatch) extractedTitle = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+                                if (creatorMatch) extractedAuthor = creatorMatch[1].replace(/<[^>]+>/g, '').trim();
+                                
+                                // Cover Extraction
+                                let coverId = null;
+                                const coverMetaMatch = opfData.match(/<meta[^>]*name=["']cover["'][^>]*content=["']([^"']+)["']/i);
+                                if (coverMetaMatch) coverId = coverMetaMatch[1];
+                                
+                                let coverHref = null;
+                                if (coverId) {
+                                    const itemMatch = opfData.match(new RegExp(`<item[^>]*id=["']${coverId}["'][^>]*href=["']([^"']+)["']`, 'i'));
+                                    if (itemMatch) coverHref = itemMatch[1];
+                                }
+                                if (!coverHref) {
+                                    const propMatch = opfData.match(/<item[^>]*properties=["']cover-image["'][^>]*href=["']([^"']+)["']/i);
+                                    if (propMatch) coverHref = propMatch[1];
+                                }
+                                // Fallback 1: Any item with id="cover" or id="cover-image"
+                                if (!coverHref) {
+                                    const idMatch = opfData.match(/<item[^>]*id=["'](?:cover|cover-image)["'][^>]*href=["']([^"']+)["']/i);
+                                    if (idMatch) coverHref = idMatch[1];
+                                }
+                                // Fallback 2: Any image item with "cover" or "front" in the filename
+                                if (!coverHref) {
+                                    const nameMatch = opfData.match(/<item[^>]*href=["']([^"']*(?:cover|front)[^"']*\.(?:jpg|jpeg|png))["'][^>]*media-type=["']image\/[^"']+["']/i);
+                                    if (nameMatch) coverHref = nameMatch[1];
+                                }
+                                
+                                if (coverHref) {
+                                    let opfDir = opfPath.substring(0, opfPath.lastIndexOf('/'));
+                                    let absCoverPath = opfDir ? `${opfDir}/${coverHref}` : coverHref;
+                                    const coverEntry = zip.getEntry(absCoverPath);
+                                    if (coverEntry) {
+                                        const picData = coverEntry.getData();
+                                        const fileExt = coverHref.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+                                        extractedCoverPath = saveCoverArt("book_" + id, picData, fileExt);
+                                    }
+                                }
+                            }
+                        } catch (err) {}
+
+                        let pushData = {
+                            id,
+                            title: extractedTitle,
+                            author: extractedAuthor,
+                            filename: item.name,
+                            path: fullPath,
+                            size: stat.size,
+                            modified: stat.mtimeMs
+                        };
+                        if (extractedCoverPath) {
+                            pushData.coverArt = 'file:///' + extractedCoverPath;
+                        }
+                        books.push(pushData);
+                        
+                        processCount++;
+                        // Yield event loop every 50 books to prevent frozen UI on giant library
+                        if (processCount % 50 === 0) {
+                            await new Promise(r => setImmediate(r));
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Book scan error:', e);
+        }
+    }
+
+    await scanDir(startFolder);
+    books.sort((a, b) => a.title.localeCompare(b.title));
+
+    const libraryData = { path: startFolder, books };
+    fs.writeFileSync(bookDataPath, JSON.stringify(libraryData), 'utf8');
+    return libraryData;
+});
+
+ipcMain.handle('books:getFile', async (_event, filePath) => {
+    try {
+        const data = fs.readFileSync(filePath);
+        // Return as ArrayBuffer-compatible for epub.js
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    } catch (e) {
+        console.error('Failed to read book file:', e.message);
+        return null;
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── VIDEO IPC Handlers ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+async function getVideoLibrary() {
+    if (fs.existsSync(videoDataPath)) {
+        try { return JSON.parse(fs.readFileSync(videoDataPath, 'utf8')); }
+        catch(e) {}
+    }
+    return null;
+}
+
+ipcMain.handle('video:getLibrary', async () => {
+    return await getVideoLibrary();
+});
+
+ipcMain.handle('video:openFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory'],
+        title: 'Select Video Folder'
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const startFolder = result.filePaths[0];
+    const videos = [];
+    const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v', '.wmv'];
+
+    function scanDir(dir) {
+        try {
+            const items = fs.readdirSync(dir, { withFileTypes: true });
+            for (const item of items) {
+                const fullPath = path.join(dir, item.name);
+                if (item.isDirectory()) {
+                    scanDir(fullPath);
+                } else if (item.isFile()) {
+                    const ext = path.extname(item.name).toLowerCase();
+                    if (videoExts.includes(ext)) {
+                        const stat = fs.statSync(fullPath);
+                        const id = crypto.createHash('sha256').update(fullPath).digest('hex').substring(0, 16);
+                        
+                        let vidType = "movie";
+                        let showName = null;
+                        let seasonNum = null;
+                        let episodeNum = null;
+
+                        let baseName = item.name.replace(ext, '');
+                        // tv match on the original name
+                        const tvMatch = baseName.match(/(?:\b|_)S(\d{1,2})E(\d{1,2})(?:\b|_)/i) || baseName.match(/(?:\b|_)0?(\d{1,2})x(\d{1,2})(?:\b|_)/i) || baseName.match(/S(\d{1,2})E(\d{1,2})/i);
+                        
+                        let title = baseName.replace(/_/g, ' ');
+
+                        if (tvMatch) {
+                            vidType = "tv";
+                            seasonNum = parseInt(tvMatch[1], 10);
+                            episodeNum = parseInt(tvMatch[2], 10);
+                            
+                            showName = title.substring(0, tvMatch.index).trim();
+                            if (showName.endsWith('-')) showName = showName.slice(0, -1).trim();
+                            
+                            if (!showName || showName.length < 2) {
+                                showName = path.basename(dir);
+                                if (showName.toLowerCase().includes('season')) {
+                                    showName = path.basename(path.dirname(dir));
+                                }
+                            }
+                        } else {
+                            title = title.replace(/\.(19|20)\d{2}\..*/, '');
+                            title = title.replace(/\./g, ' ').trim();
+                        }
+
+                        if (vidType === "tv" && (!showName || showName.length < 2)) showName = "Unknown Show";
+
+                        let posterPath = null;
+                        const posterCandidates = [`${baseName}.jpg`, `${baseName}.png`, `${baseName}-thumb.jpg`, 'poster.jpg', 'cover.jpg', 'folder.jpg'];
+                        for (const cand of posterCandidates) {
+                            const cp = path.join(dir, cand);
+                            if (fs.existsSync(cp)) {
+                                posterPath = cp.replace(/\\/g, '/');
+                                break;
+                            }
+                        }
+
+                        const vidObj = {
+                            id,
+                            title,
+                            type: vidType,
+                            filename: item.name,
+                            path: fullPath,
+                            poster: posterPath,
+                            size: stat.size,
+                            modified: stat.mtimeMs,
+                            duration: 0
+                        };
+
+                        if (vidType === 'tv') {
+                            vidObj.show = showName;
+                            vidObj.season = seasonNum;
+                            vidObj.episode = episodeNum;
+                            
+                            // Find the overarching show poster from parent directories
+                            let sPoster = null;
+                            const pCands = ['poster.jpg', 'cover.jpg', 'folder.jpg', 'fanart.jpg', 'banner.jpg'];
+                            for (const cDir of [dir, path.dirname(dir), path.dirname(path.dirname(dir))]) {
+                                for (const pCand of pCands) {
+                                    const pp = path.join(cDir, pCand);
+                                    if (fs.existsSync(pp)) {
+                                        sPoster = pp.replace(/\\/g, '/');
+                                        break;
+                                    }
+                                }
+                                if (sPoster) break;
+                            }
+                            vidObj.showPoster = sPoster;
+                        }
+
+                        videos.push(vidObj);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Video scan error:', e);
+        }
+    }
+
+    scanDir(startFolder);
+
+    // Try to extract duration with ffprobe for each video
+    for (const video of videos) {
+        try {
+            const dur = await new Promise((resolve) => {
+                execFile('ffprobe', [
+                    '-v', 'quiet', '-print_format', 'json',
+                    '-show_format', video.path
+                ], { timeout: 5000 }, (err, stdout) => {
+                    if (err) return resolve(0);
+                    try {
+                        const data = JSON.parse(stdout);
+                        resolve(parseFloat(data.format?.duration) || 0);
+                    } catch(e) { resolve(0); }
+                });
+            });
+            video.duration = dur;
+        } catch(e) { /* skip */ }
+    }
+
+    videos.sort((a, b) => a.title.localeCompare(b.title));
+
+    const libraryData = { path: startFolder, videos };
+    fs.writeFileSync(videoDataPath, JSON.stringify(libraryData), 'utf8');
+    return libraryData;
+});
+
+ipcMain.handle('video:getThumbnail', async (_event, filePath) => {
+    const id = crypto.createHash('sha256').update(filePath).digest('hex').substring(0, 16);
+    const thumbPath = path.join(thumbsDir, `${id}.jpg`);
+    if (fs.existsSync(thumbPath)) {
+        return thumbPath.replace(/\\/g, '/');
+    }
+    // Generate thumbnail with ffmpeg
+    return new Promise((resolve) => {
+        execFile('ffmpeg', [
+            '-i', filePath, '-ss', '00:00:05',
+            '-vframes', '1', '-q:v', '4',
+            '-vf', 'scale=320:-1',
+            thumbPath
+        ], { timeout: 10000 }, (err) => {
+            if (err) {
+                console.error('Thumbnail generation failed:', err.message);
+                return resolve(null);
+            }
+            resolve(thumbPath.replace(/\\/g, '/'));
         });
     });
 });

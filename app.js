@@ -4,6 +4,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-maximize')?.addEventListener('click', () => window.omega.window.maximize());
     document.getElementById('btn-close')?.addEventListener('click', () => window.omega.window.close());
 
+    // ── AIO Tab Switching ────────────────────────────────────────────────
+    const aioTabs = document.querySelectorAll('.aio-tab');
+    const aioPanels = document.querySelectorAll('.aio-panel');
+    let booksInitialized = false;
+    let videoInitialized = false;
+
+    aioTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
+
+            // Update tab active states
+            aioTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            // Show/hide panels
+            aioPanels.forEach(p => {
+                if (p.id === `panel-${target}`) {
+                    p.classList.add('active');
+                    p.style.display = 'flex';
+                } else {
+                    p.classList.remove('active');
+                    p.style.display = 'none';
+                }
+            });
+
+            // Lazy init for books and video
+            if (target === 'books' && !booksInitialized) {
+                booksInitialized = true;
+                if (window._sovereignBooksInit) window._sovereignBooksInit();
+            }
+            if (target === 'video' && !videoInitialized) {
+                videoInitialized = true;
+                if (window._sovereignVideoInit) window._sovereignVideoInit();
+            }
+            window._omegaActiveTab = target;
+        });
+    });
+
+    window._omegaActiveTab = 'audio';
+
+    function getActiveMedia() {
+        if (window._omegaActiveTab === 'video') {
+            return document.getElementById('video-element');
+        }
+        return document.getElementById('media-local-audio');
+    }
+
+    // Initialize panel visibility (only audio visible at start)
+    aioPanels.forEach(p => {
+        if (p.id === 'panel-audio') {
+            p.style.display = 'flex';
+        } else {
+            p.style.display = 'none';
+        }
+    });
+
     // ── Elements ─────────────────────────────────────────────────────────
     const btnSrcLocal = document.getElementById('media-src-local');
     const btnSrcYt = document.getElementById('media-src-yt');
@@ -55,9 +111,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sleepTimeRemaining = document.getElementById('sleep-time-remaining');
     const sleepOffBtn = document.getElementById('sleep-off-btn');
 
-    // ── New Elements ─────────────────────────────────────────────────────
     const detailGhostBg = document.getElementById('detail-ghost-bg');
     const chapterBtn = document.getElementById('detail-chapter-btn');
+    const miniBtn = document.getElementById('media-mini');
     const chapterDrawer = document.getElementById('chapter-drawer');
     const chapterDrawerClose = document.getElementById('chapter-drawer-close');
     const chapterDrawerList = document.getElementById('chapter-drawer-list');
@@ -87,6 +143,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sleep timer state
     let sleepTimerId = null;
     let sleepEndTime = null;
+
+    // Mini Player State
+    let miniMode = 'normal';
+    if (miniBtn) {
+        miniBtn.addEventListener('click', () => {
+            if (miniMode === 'normal') {
+                miniMode = 'square';
+                document.body.classList.remove('mode-mini-ribbon');
+                document.body.classList.add('mode-mini-square');
+            } else if (miniMode === 'square') {
+                miniMode = 'ribbon';
+                document.body.classList.remove('mode-mini-square');
+                document.body.classList.add('mode-mini-ribbon');
+            } else {
+                miniMode = 'normal';
+                document.body.classList.remove('mode-mini-square', 'mode-mini-ribbon');
+            }
+            window.omega.window.setMiniMode(miniMode);
+        });
+    }
 
     // ── Web Audio API — The Pulse ────────────────────────────────────────
     let audioCtx = null;
@@ -192,7 +268,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Sort/Group Logic ─────────────────────────────────────────────────
     function sortAlbums(albums, sortKey) {
         const sorted = [...albums];
+        let positions = {};
+        try { positions = JSON.parse(localStorage.getItem('omega_playback_positions') || '{}'); } catch(e){}
+
         switch (sortKey) {
+            case 'recent':
+                sorted.sort((a, b) => {
+                    const tA = positions[a.id]?.timestamp || 0;
+                    const tB = positions[b.id]?.timestamp || 0;
+                    if (tA !== tB) return tB - tA; // newest first
+                    return a.name.localeCompare(b.name);
+                });
+                break;
             case 'title':
                 sorted.sort((a, b) => a.name.localeCompare(b.name));
                 break;
@@ -230,6 +317,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Playback Position Persistence ────────────────────────────────────
     const POSITION_KEY = 'omega_playback_positions';
+    const GLOBAL_KEY = 'omega_global_state';
 
     function savePosition() {
         if (!activeAlbumId || activeTrackIndex < 0) return;
@@ -241,6 +329,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 timestamp: Date.now()
             };
             localStorage.setItem(POSITION_KEY, JSON.stringify(positions));
+
+            // Also save globally active track
+            localStorage.setItem(GLOBAL_KEY, JSON.stringify({
+                albumId: activeAlbumId,
+                trackIndex: activeTrackIndex,
+                currentTime: audioEl.currentTime || 0
+            }));
         } catch (e) {}
     }
 
@@ -283,6 +378,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (data && data.albums) {
             libraryData = data;
             renderLibrary();
+            
+            // Restore globally active track in a suspended (paused) state
+            try {
+                const globalState = JSON.parse(localStorage.getItem('omega_global_state'));
+                if (globalState && globalState.albumId) {
+                    playLocalTrack(globalState.albumId, globalState.trackIndex, globalState.currentTime, true);
+                }
+            } catch(e) {}
         } else {
             libraryEmpty.classList.remove('hidden');
         }
@@ -624,7 +727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return libraryData.albums.find(a => a.id === albumId);
     }
 
-    function playLocalTrack(albumId, trackIndex, resumeTime = 0) {
+    function playLocalTrack(albumId, trackIndex, resumeTime = 0, forcePause = false) {
         const album = getGlobalAlbum(albumId);
         if (!album || trackIndex < 0 || trackIndex >= album.tracks.length) return;
 
@@ -637,7 +740,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Init Web Audio API on first user-initiated play
-        initAudioContext();
+        if (!forcePause) initAudioContext();
 
         audioEl.src = `file:///${track.path.replace(/\\/g, '/')}`;
         audioEl.addEventListener('loadedmetadata', function onLoad() {
@@ -646,13 +749,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (resumeTime > 0) {
                 audioEl.currentTime = resumeTime;
             }
-            audioEl.play().catch(console.error);
+            if (!forcePause) {
+                audioEl.play().catch(console.error);
+            } else {
+                setTimeout(() => audioEl.dispatchEvent(new Event('timeupdate')), 100);
+            }
         });
 
         syncTrackInfo();
     }
 
     function togglePlayPause() {
+        const media = getActiveMedia();
+        if (window._omegaActiveTab === 'video') {
+            if (media.src) {
+                if (media.paused) media.play();
+                else media.pause();
+            }
+            return;
+        }
+
         if (currentSource !== 'local') return;
 
         if (activeAlbumId === null && currentAlbumData && currentAlbumData.tracks.length > 0) {
@@ -668,23 +784,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        if (audioEl.paused) audioEl.play();
-        else audioEl.pause();
+        if (media.paused) media.play();
+        else media.pause();
     }
 
     // ── Transport Controls ───────────────────────────────────────────────
     playBtn.addEventListener('click', togglePlayPause);
 
     prevBtn.addEventListener('click', () => {
+        const media = getActiveMedia();
+        if (window._omegaActiveTab === 'video') {
+            if (media.duration) media.currentTime = Math.max(0, media.currentTime - 15);
+            return;
+        }
         if (currentSource !== 'local') return;
-        if (audioEl.currentTime > 3) {
-            audioEl.currentTime = 0;
+        if (media.currentTime > 3) {
+            media.currentTime = 0;
         } else if (activeAlbumId !== null && activeTrackIndex > 0) {
             playLocalTrack(activeAlbumId, activeTrackIndex - 1);
         }
     });
 
     nextBtn.addEventListener('click', () => {
+        const media = getActiveMedia();
+        if (window._omegaActiveTab === 'video') {
+            if (media.duration) media.currentTime = Math.min(media.duration, media.currentTime + 15);
+            return;
+        }
         if (currentSource !== 'local' || activeAlbumId === null) return;
         const album = getGlobalAlbum(activeAlbumId);
         if (album && activeTrackIndex < album.tracks.length - 1) {
@@ -696,78 +822,105 @@ document.addEventListener('DOMContentLoaded', async () => {
         let idx = speeds.indexOf(playSpeed);
         idx = (idx + 1) % speeds.length;
         playSpeed = speeds[idx];
-        audioEl.playbackRate = playSpeed;
+        getActiveMedia().playbackRate = playSpeed;
         speedBtn.textContent = playSpeed + '×';
     });
 
-    // ── Audio Events ────────────────────────────────────────────────────
-    audioEl.addEventListener('play', () => {
-        isPlaying = true;
-        iconPlay.classList.add('hidden');
-        iconPause.classList.remove('hidden');
-        playBtn.classList.add('playing');
-        coverArtBox.classList.add('playing');
-        if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
-            detailPlayAll.textContent = '⏸  Pause';
-        }
-        startVisualizer();
-        if (!chapterDrawer.classList.contains('hidden')) renderChapterDrawer();
-    });
+    // ── Bind Events to Both Media Elements ──────────────────────────────
+    const videoEl = document.getElementById('video-element');
 
-    audioEl.addEventListener('pause', () => {
-        isPlaying = false;
-        iconPlay.classList.remove('hidden');
-        iconPause.classList.add('hidden');
-        playBtn.classList.remove('playing');
-        coverArtBox.classList.remove('playing');
-        savePosition();
-        if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
-            detailPlayAll.textContent = '▶  Resume';
-        }
-        stopVisualizer();
-    });
+    function bindMediaEvents(el, isVideo) {
+        el.addEventListener('play', () => {
+            if (isVideo && window._omegaActiveTab !== 'video') return;
+            if (!isVideo && window._omegaActiveTab === 'video') return;
 
-    audioEl.addEventListener('ended', () => {
-        savePosition();
-        const album = getGlobalAlbum(activeAlbumId);
-        if (album && activeTrackIndex < album.tracks.length - 1) {
-            playLocalTrack(activeAlbumId, activeTrackIndex + 1);
-        } else {
+            isPlaying = true;
+            iconPlay.classList.add('hidden');
+            iconPause.classList.remove('hidden');
+            playBtn.classList.add('playing');
+            coverArtBox.classList.add('playing');
+            if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
+                detailPlayAll.textContent = '⏸  Pause';
+            }
+            if (!isVideo) startVisualizer();
+            if (!isVideo && !chapterDrawer.classList.contains('hidden')) renderChapterDrawer();
+        });
+
+        el.addEventListener('pause', () => {
+            if (isVideo && window._omegaActiveTab !== 'video') return;
+            if (!isVideo && window._omegaActiveTab === 'video') return;
+
             isPlaying = false;
             iconPlay.classList.remove('hidden');
             iconPause.classList.add('hidden');
             playBtn.classList.remove('playing');
             coverArtBox.classList.remove('playing');
-            stopVisualizer();
-        }
-    });
+            savePosition();
+            if (currentAlbumData && activeAlbumId === currentAlbumData.id) {
+                detailPlayAll.textContent = '▶  Resume';
+            }
+            if (!isVideo) stopVisualizer();
+        });
 
-    // ── Time & Seeking ──────────────────────────────────────────────────
-    audioEl.addEventListener('timeupdate', () => {
-        if (!audioEl.duration) return;
-        seekCur.textContent = formatTime(audioEl.currentTime);
-        seekDur.textContent = formatTime(audioEl.duration);
-        if (!isSeeking) {
-            seekSlider.value = (audioEl.currentTime / audioEl.duration) * 1000;
-        }
-    });
+        el.addEventListener('ended', () => {
+            if (isVideo && window._omegaActiveTab !== 'video') return;
+            if (!isVideo && window._omegaActiveTab === 'video') return;
 
-    audioEl.addEventListener('loadedmetadata', () => {
-        seekDur.textContent = formatTime(audioEl.duration);
-        audioEl.playbackRate = playSpeed;
-    });
+            savePosition();
+            if (isVideo) {
+                 isPlaying = false;
+                 iconPlay.classList.remove('hidden');
+                 iconPause.classList.add('hidden');
+                 playBtn.classList.remove('playing');
+                 return;
+            }
+            const album = getGlobalAlbum(activeAlbumId);
+            if (album && activeTrackIndex < album.tracks.length - 1) {
+                playLocalTrack(activeAlbumId, activeTrackIndex + 1);
+            } else {
+                isPlaying = false;
+                iconPlay.classList.remove('hidden');
+                iconPause.classList.add('hidden');
+                playBtn.classList.remove('playing');
+                coverArtBox.classList.remove('playing');
+                stopVisualizer();
+            }
+        });
+
+        el.addEventListener('timeupdate', () => {
+            if (isVideo && window._omegaActiveTab !== 'video') return;
+            if (!isVideo && window._omegaActiveTab === 'video') return;
+
+            if (!el.duration) return;
+            seekCur.textContent = formatTime(el.currentTime);
+            seekDur.textContent = formatTime(el.duration);
+            if (!isSeeking) {
+                seekSlider.value = (el.currentTime / el.duration) * 1000;
+            }
+        });
+
+        el.addEventListener('loadedmetadata', () => {
+            seekDur.textContent = formatTime(el.duration);
+            el.playbackRate = playSpeed;
+        });
+    }
+
+    bindMediaEvents(audioEl, false);
+    bindMediaEvents(videoEl, true);
 
     let isSeeking = false;
     seekSlider.addEventListener('mousedown', () => isSeeking = true);
     seekSlider.addEventListener('input', () => {
-        if (audioEl.duration) {
-            seekCur.textContent = formatTime((seekSlider.value / 1000) * audioEl.duration);
+        const media = getActiveMedia();
+        if (media.duration) {
+            seekCur.textContent = formatTime((seekSlider.value / 1000) * media.duration);
         }
     });
     seekSlider.addEventListener('mouseup', () => {
         isSeeking = false;
-        if (audioEl.duration) {
-            audioEl.currentTime = (seekSlider.value / 1000) * audioEl.duration;
+        const media = getActiveMedia();
+        if (media.duration) {
+            media.currentTime = (seekSlider.value / 1000) * media.duration;
             savePosition();
         }
     });
@@ -777,6 +930,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const v = e.target.value;
         volVal.textContent = v;
         audioEl.volume = v / 100;
+        videoEl.volume = v / 100;
         let icon = '🔊';
         if (v == 0) icon = '🔇';
         else if (v < 30) icon = '🔈';
@@ -784,6 +938,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('media-vol-icon').textContent = icon;
     });
     audioEl.volume = volSlider.value / 100;
+    videoEl.volume = volSlider.value / 100;
 
     // ── Sleep Timer ─────────────────────────────────────────────────────
     sleepBtn.addEventListener('click', (e) => {
@@ -850,15 +1005,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
-                if (audioEl.duration) {
-                    audioEl.currentTime = Math.max(0, audioEl.currentTime - 15);
+                const mediaLeft = getActiveMedia();
+                if (mediaLeft.duration) {
+                    mediaLeft.currentTime = Math.max(0, mediaLeft.currentTime - 15);
                     showToast('⏪ -15s');
                 }
                 break;
             case 'ArrowRight':
                 e.preventDefault();
-                if (audioEl.duration) {
-                    audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + 15);
+                const mediaRight = getActiveMedia();
+                if (mediaRight.duration) {
+                    mediaRight.currentTime = Math.min(mediaRight.duration, mediaRight.currentTime + 15);
                     showToast('⏩ +15s');
                 }
                 break;
