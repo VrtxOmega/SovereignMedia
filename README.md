@@ -1,10 +1,17 @@
-# Omega Audio Player
+# Ω Sovereign Media
 
-Premium standalone audiobook & podcast library built with Electron.
+Premium standalone all-in-one media platform built with Electron.
 
 **VERITAS Gold-and-Black aesthetic** — a machined, OS-level media environment.
 
-![Omega Audio](https://img.shields.io/badge/Electron-31.x-47848F?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-gold?style=flat-square)
+![Sovereign Media](https://img.shields.io/badge/Electron-31.x-47848F?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-gold?style=flat-square)
+
+## Media Types
+
+- 🎧 **Audiobooks & Podcasts** — Full library with ID3 metadata, cover art, chapter navigation
+- 📖 **eBooks** — EPUB reader with paginated/scroll modes, typography controls, reading progress
+- 🎬 **Video** — Native video player with position persistence and thumbnail generation
+- ♪ **YouTube Music** — Embedded web player
 
 ## Features
 
@@ -31,8 +38,7 @@ The UI implements a "hardware rack" metaphor:
 ## Getting Started
 
 ```bash
-git clone https://github.com/RJLopezAI/omega-audio-player.git
-cd omega-audio-player
+cd sovereign-media
 npm install
 npm start
 ```
@@ -41,6 +47,8 @@ npm start
 
 - **Electron** — Desktop runtime
 - **music-metadata** — ID3 tag parser
+- **epub.js** — EPUB rendering engine
+- **video.js** — Video player controls
 - **Node.js** — `crypto`, `fs`, `path`
 
 ## License

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Omega Audio Player</title>
+    <title>Ω Sovereign Media</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -20,7 +20,7 @@
     <div id="titlebar">
         <div class="titlebar-left">
             <span class="titlebar-icon">Ω</span>
-            <span class="titlebar-title">OMEGA AUDIO</span>
+            <span class="titlebar-title">SOVEREIGN MEDIA</span>
         </div>
         <div class="titlebar-center" id="titlebar-filepath"></div>
         <div class="titlebar-controls">
@@ -30,9 +30,28 @@
         </div>
     </div>
 
+    <!-- ═══ AIO Media Tab Bar ═══ -->
+    <div id="aio-tab-bar">
+        <button class="aio-tab active" data-tab="audio" id="aio-tab-audio">
+            <span class="aio-tab-icon">🎧</span>
+            <span class="aio-tab-label">Audio</span>
+        </button>
+        <button class="aio-tab" data-tab="books" id="aio-tab-books">
+            <span class="aio-tab-icon">📖</span>
+            <span class="aio-tab-label">Books</span>
+        </button>
+        <button class="aio-tab" data-tab="video" id="aio-tab-video">
+            <span class="aio-tab-icon">🎬</span>
+            <span class="aio-tab-label">Video</span>
+        </button>
+    </div>
+
     <!-- ═══ Main App Container ═══ -->
     <div id="app">
-        <div class="media-panel">
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- TAB 1: AUDIO (existing audio player)                       -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="media-panel aio-panel active" id="panel-audio">
             <!-- Source Toggle -->
             <div class="media-source-toggle">
                 <button class="media-source-btn active" data-source="local" id="media-src-local">📁 Local Library</button>
@@ -57,6 +76,7 @@
                     </div>
                     <div class="media-sort-controls">
                         <select class="media-sort-select" id="media-sort" title="Sort library">
+                            <option value="recent">Recently Played</option>
                             <option value="title">A → Z</option>
                             <option value="author">Author</option>
                             <option value="tracks-desc">Most Tracks</option>
@@ -116,62 +136,153 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Footer: Media Player Bar -->
-            <div class="media-player-bar" id="media-player-bar">
-                <!-- Track Info with Cover Art -->
-                <div class="media-track-info" id="media-track-info">
-                    <div class="media-cover-art" id="media-cover-art">
-                        <span class="media-cover-fallback">Ω</span>
-                        <img class="media-cover-img hidden" id="media-cover-img" alt="" />
-                    </div>
-                    <div class="media-track-text">
-                        <div class="media-track-title" id="media-track-title">No track playing</div>
-                        <div class="media-track-artist" id="media-track-artist">Select a file to play</div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- TAB 2: BOOKS (eBook Reader)                                -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="media-panel aio-panel" id="panel-books">
+            <!-- Book Library View -->
+            <div class="book-library" id="book-library">
+                <div class="book-library-header">
+                    <button class="media-local-folder-btn" id="book-add-folder">📂 Add/Refresh Book Folder</button>
+                    <div class="media-search-bar" style="display: flex; gap: 8px;">
+                        <select id="book-sort" class="media-search-input" style="width: auto; cursor: pointer; padding-right: 12px;">
+                            <option value="recent">Recent</option>
+                            <option value="az">A - Z</option>
+                            <option value="za">Z - A</option>
+                            <option value="author">Author & Series</option>
+                        </select>
+                        <input type="text" class="media-search-input" id="book-search" placeholder="Search books..." style="flex: 1;" />
+                        <span class="media-search-count" id="book-search-count"></span>
                     </div>
                 </div>
-
-                <!-- Transport Controls — Machined Hardware -->
-                <div class="media-transport">
-                    <div class="media-controls">
-                        <button class="media-btn media-btn-skip" id="media-prev" title="Previous (←)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
-                        </button>
-                        <button class="media-btn media-btn-play" id="media-play" title="Play/Pause (Space)">
-                            <svg class="icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21"/></svg>
-                            <svg class="icon-pause hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="4" height="18" rx="1"/><rect x="15" y="3" width="4" height="18" rx="1"/></svg>
-                        </button>
-                        <button class="media-btn media-btn-skip" id="media-next" title="Next (→)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-                        </button>
-                        <button class="media-btn media-speed-btn" id="media-speed" title="Playback Speed">1×</button>
-                        <button class="media-btn media-sleep-btn" id="media-sleep" title="Sleep Timer">🌙</button>
+                <div class="book-grid-container" id="book-grid-container">
+                    <div class="playlist-empty" id="book-empty">
+                        <div class="empty-omega">Ω</div>
+                        <div>No books loaded.</div>
+                        <div style="font-size:12px; margin-top:4px;">Click "Add/Refresh Book Folder" to scan your EPUB files.</div>
                     </div>
-
-                    <!-- Seek bar -->
-                    <div class="media-seek" id="media-seek-area">
-                        <span class="media-seek-time" id="media-seek-cur">0:00</span>
-                        <input type="range" class="media-seek-slider" id="media-seek" min="0" max="1000" value="0" />
-                        <span class="media-seek-time" id="media-seek-dur">0:00</span>
-                    </div>
-                </div>
-
-                <!-- Volume + Sleep -->
-                <div class="media-volume-area">
-                    <div class="sleep-indicator hidden" id="sleep-indicator">
-                        <span class="sleep-icon">🌙</span>
-                        <span class="sleep-time" id="sleep-time-remaining">--:--</span>
-                    </div>
-                    <div class="media-volume">
-                        <span class="media-volume-icon" id="media-vol-icon">🔊</span>
-                        <input type="range" id="media-volume" class="media-volume-slider" min="0" max="100" value="70" />
-                        <span class="media-volume-val" id="media-vol-val">70</span>
-                    </div>
+                    <div class="book-grid" id="book-grid"></div>
                 </div>
             </div>
+            <!-- Book Reader View (hidden until a book is opened) -->
+            <div class="book-reader hidden" id="book-reader">
+                <div class="book-reader-toolbar">
+                    <button class="detail-back-btn" id="book-reader-back">← Back to Library</button>
+                    <div class="book-reader-title" id="book-reader-title">-</div>
+                    <div class="book-reader-controls">
+                        <button class="book-ctrl-btn" id="book-font-down" title="Smaller Text">A−</button>
+                        <button class="book-ctrl-btn" id="book-font-up" title="Larger Text">A+</button>
+                        <button class="book-ctrl-btn" id="book-theme-toggle" title="Toggle Theme">◐</button>
+                        <button class="book-ctrl-btn" id="book-toc-toggle" title="Table of Contents">☰</button>
+                    </div>
+                </div>
+                <!-- TOC Drawer -->
+                <div class="book-toc-drawer hidden" id="book-toc-drawer">
+                    <div class="book-toc-header">
+                        <span>TABLE OF CONTENTS</span>
+                        <button class="book-toc-close" id="book-toc-close">✕</button>
+                    </div>
+                    <div class="book-toc-list" id="book-toc-list"></div>
+                </div>
+                <!-- EPUB Render Area -->
+                <div class="book-reader-area" id="book-reader-area"></div>
+                <!-- Page Navigation -->
+                <div class="book-nav-bar">
+                    <button class="book-nav-btn" id="book-prev-page">‹ Prev</button>
+                    <div class="book-progress" id="book-progress">-</div>
+                    <button class="book-nav-btn" id="book-next-page">Next ›</button>
+                </div>
+            </div>
+        </div>
 
-            <!-- Hidden audio element -->
-            <audio id="media-local-audio" preload="auto"></audio>
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- TAB 3: VIDEO (Native Video Player)                         -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="media-panel aio-panel" id="panel-video">
+            <!-- Video Library View -->
+            <div class="video-library" id="video-library">
+                <div class="video-library-header">
+                    <button class="media-local-folder-btn" id="video-add-folder">📂 Add/Refresh Video Folder</button>
+                    <div class="media-search-bar">
+                        <input type="text" class="media-search-input" id="video-search" placeholder="Search videos..." />
+                        <span class="media-search-count" id="video-search-count"></span>
+                    </div>
+                </div>
+                <div class="video-grid-container" id="video-grid-container">
+                    <div class="playlist-empty" id="video-empty">
+                        <div class="empty-omega">Ω</div>
+                        <div>No videos loaded.</div>
+                        <div style="font-size:12px; margin-top:4px;">Click "Add/Refresh Video Folder" to scan your video files.</div>
+                    </div>
+                    <div class="video-grid" id="video-grid"></div>
+                </div>
+            </div>
+            <!-- Video Player View (hidden until a video is opened) -->
+            <div class="video-player hidden" id="video-player">
+                <div class="video-player-toolbar">
+                    <button class="detail-back-btn" id="video-player-back">← Back to Library</button>
+                    <div class="video-player-title" id="video-player-title">-</div>
+                </div>
+                <div class="video-player-area" id="video-player-area">
+                    <video id="video-element" controls preload="auto"></video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer: Media Player Bar (always visible, for audio) -->
+    <div class="media-player-bar" id="media-player-bar">
+        <!-- Track Info with Cover Art -->
+        <div class="media-track-info" id="media-track-info">
+            <div class="media-cover-art" id="media-cover-art">
+                <span class="media-cover-fallback">Ω</span>
+                <img class="media-cover-img hidden" id="media-cover-img" alt="" />
+            </div>
+            <div class="media-track-text">
+                <div class="media-track-title" id="media-track-title">No track playing</div>
+                <div class="media-track-artist" id="media-track-artist">Select a file to play</div>
+            </div>
+        </div>
+
+        <!-- Transport Controls — Machined Hardware -->
+        <div class="media-transport">
+            <div class="media-controls">
+                <button class="media-btn media-btn-skip" id="media-prev" title="Previous (←)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+                </button>
+                <button class="media-btn media-btn-play" id="media-play" title="Play/Pause (Space)">
+                    <svg class="icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21"/></svg>
+                    <svg class="icon-pause hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="4" height="18" rx="1"/><rect x="15" y="3" width="4" height="18" rx="1"/></svg>
+                </button>
+                <button class="media-btn media-btn-skip" id="media-next" title="Next (→)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                </button>
+                <button class="media-btn media-speed-btn" id="media-speed" title="Playback Speed">1×</button>
+                <button class="media-btn media-sleep-btn" id="media-sleep" title="Sleep Timer">🌙</button>
+                <button class="media-btn media-mini-btn" id="media-mini" title="Mini Player">◰</button>
+            </div>
+
+            <!-- Seek bar -->
+            <div class="media-seek" id="media-seek-area">
+                <span class="media-seek-time" id="media-seek-cur">0:00</span>
+                <input type="range" class="media-seek-slider" id="media-seek" min="0" max="1000" value="0" />
+                <span class="media-seek-time" id="media-seek-dur">0:00</span>
+            </div>
+        </div>
+
+        <!-- Volume + Sleep -->
+        <div class="media-volume-area">
+            <div class="sleep-indicator hidden" id="sleep-indicator">
+                <span class="sleep-icon">🌙</span>
+                <span class="sleep-time" id="sleep-time-remaining">--:--</span>
+            </div>
+            <div class="media-volume">
+                <span class="media-volume-icon" id="media-vol-icon">🔊</span>
+                <input type="range" id="media-volume" class="media-volume-slider" min="0" max="100" value="70" />
+                <span class="media-volume-val" id="media-vol-val">70</span>
+            </div>
         </div>
     </div>
 
@@ -186,6 +297,13 @@
         <button class="sleep-option sleep-option-off hidden" data-mins="0" id="sleep-off-btn">Cancel Timer</button>
     </div>
 
+    <!-- Hidden audio element -->
+    <audio id="media-local-audio" preload="auto"></audio>
+
     <script src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+    <script src="books.js"></script>
+    <script src="video.js"></script>
 </body>
 </html>
