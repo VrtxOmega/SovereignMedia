@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="https://raw.githubusercontent.com/VrtxOmega/Gravity-Omega/master/omega_icon.png" width="100" alt="VERITAS" />
   <h1>SOVEREIGN MEDIA</h1>
   <p><strong>All-in-One Premium Media Platform</strong></p>
   <p><em>Audiobooks. eBooks. Video. One sovereign interface.</em></p>
