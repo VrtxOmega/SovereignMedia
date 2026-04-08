@@ -1,56 +1,59 @@
-# Ω Sovereign Media
+<div align="center">
+  <h1>SOVEREIGN MEDIA</h1>
+  <p><strong>All-in-One Premium Media Platform</strong></p>
+  <p><em>Audiobooks. eBooks. Video. One sovereign interface.</em></p>
+</div>
 
-Premium standalone all-in-one media platform built with Electron.
+![Status](https://img.shields.io/badge/Status-ACTIVE-success?style=for-the-badge&labelColor=000000&color=d4af37)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&labelColor=000000)
+![Stack](https://img.shields.io/badge/Electron-31.x-47848F?style=for-the-badge&labelColor=000000)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge&labelColor=000000)
 
-**VERITAS Gold-and-Black aesthetic** — a machined, OS-level media environment.
+---
 
-![Sovereign Media](https://img.shields.io/badge/Electron-31.x-47848F?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-gold?style=flat-square)
+Sovereign Media is a unified AIO media platform built with Electron. Native playback for audiobooks, eBooks (epub.js), and video (HTML5) within a single VERITAS-branded desktop application.
 
-## Media Types
-
-- 🎧 **Audiobooks & Podcasts** — Full library with ID3 metadata, cover art, chapter navigation
-- 📖 **eBooks** — EPUB reader with paginated/scroll modes, typography controls, reading progress
-- 🎬 **Video** — Native video player with position persistence and thumbnail generation
-- ♪ **YouTube Music** — Embedded web player
+> **Your library. Your hardware. No subscriptions, no DRM, no cloud.**
 
 ## Features
 
-- **Deep ID3 Metadata Parsing** — Every track parsed individually via `music-metadata`. Album name, artist, title, duration, track number, and cover art extracted from tags.
-- **Intelligent Album Grouping** — Files grouped by actual ID3 album tag, not folder path. SHA-256 deterministic IDs prevent collisions.
-- **File-Based Cover Art** — Cover art extracted to disk (not base64). Zero JSON bloat, instant UI rendering.
-- **Sort & Group** — Sort by Title, Author, Track Count. Group by Author view with gold section headers.
-- **Playback Position Persistence** — Auto-saves position every 10 seconds. Resume prompts on album cards and detail view.
-- **Sleep Timer** — 15/30/45/60/90 minute presets with live countdown.
-- **Keyboard Shortcuts** — Space (play/pause), ←→ (seek ±15s), ↑↓ (volume), N/P (next/prev), Esc (back).
-- **Hero Detail View** — Large cover art with dynamic desaturated blurred background and Sentinel gold flare.
-- **Now-Playing Indicator** — Active album highlighted with gold border and pulsing badge.
+- **Audiobook Player** - Full-featured audio playback with position persistence
+- **eBook Reader** - epub.js-powered reader with bookmarks and progress tracking
+- **Video Player** - HTML5 native video with position memory
+- **3-Tab Navigation** - Audio / Books / Video with seamless switching
+- **Position Persistence** - Resume exactly where you left off across all media types
+- **Library Management** - Folder-based library scanning with metadata extraction
+- **VERITAS Aesthetic** - Gold-and-black machined OS-level interface
 
-## Design
+## Architecture
 
-The UI implements a "hardware rack" metaphor:
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Shell** | Electron 31.x | Window management, IPC, file system access |
+| **Audio** | HTML5 Audio API | Audiobook playback, chapter navigation |
+| **Books** | epub.js | EPUB rendering, pagination, bookmarks |
+| **Video** | HTML5 Video | Native video playback |
+| **Storage** | localStorage + JSON | Position persistence, library index |
 
-- **SVG noise overlay** at 3% opacity mimics matte studio hardware finish
-- **Machined glass cards** with `backdrop-filter: blur(10px)` and inset cover shadows
-- **Kinetic hover** — cards lift 8px and scale 2% with smooth deceleration easing
-- **Bottom-up gold flare** with `mix-blend-mode: screen` creates a light-leak effect
-- **Glassmorphism player bar** with `blur(24px)` backdrop creates depth separation
+## Quick Start
 
-## Getting Started
-
-```bash
-cd sovereign-media
+`ash
 npm install
 npm start
-```
+`
 
-## Tech Stack
+Point the library scanner at your media directories. Sovereign Media indexes and organizes everything automatically.
 
-- **Electron** — Desktop runtime
-- **music-metadata** — ID3 tag parser
-- **epub.js** — EPUB rendering engine
-- **video.js** — Video player controls
-- **Node.js** — `crypto`, `fs`, `path`
+## Mobile Companion
+
+See [SovereignMediaMobile](https://github.com/VrtxOmega/SovereignMediaMobile) for the Android companion app with sync bridge.
 
 ## License
 
 MIT
+
+---
+
+<div align="center">
+  <sub>Built by <a href="https://github.com/VrtxOmega">RJ Lopez</a> | VERITAS Framework</sub>
+</div>
