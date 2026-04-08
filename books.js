@@ -130,6 +130,53 @@
             bookGrid.innerHTML = '<div class="playlist-empty" style="grid-column:1/-1;">No books match your search.</div>';
         }
 
+        // ── Continue Reading Carousel ──
+        if (!filter) {
+            const recentBooks = bookLibrary.books.filter(b => getBookPosition(b.id)).sort((a,b) => {
+                const pa = getBookPosition(a.id);
+                const pb = getBookPosition(b.id);
+                return pb.timestamp - pa.timestamp;
+            }).slice(0, 5);
+
+            if (recentBooks.length > 0) {
+                const ds = document.createElement('div');
+                ds.style.gridColumn = '1 / -1';
+                ds.style.marginBottom = '20px';
+                ds.innerHTML = `
+                    <div style="font-family:'Courier New'; font-size:12px; color:var(--gold-dim); font-weight:bold; letter-spacing:1.5px; margin-bottom:12px;">CONTINUE READING</div>
+                    <div id="book-continue-scroll" style="display:flex; overflow-x:auto; gap:16px; padding-bottom:12px;"></div>
+                    <div style="height:1px; background:rgba(212,175,55,0.15); margin-top:8px;"></div>
+                `;
+                bookGrid.appendChild(ds);
+                const scrollContainer = ds.querySelector('#book-continue-scroll');
+                
+                for (const b of recentBooks) {
+                    const card = document.createElement('div');
+                    card.className = 'library-card book-card';
+                    card.style.flex = '0 0 140px';
+                    card.style.marginBottom = '0';
+                    card.style.animation = 'none';
+                    card.style.opacity = '1';
+                    
+                    const artContent = b.coverArt ? 
+                        `<img src="${b.coverArt}" style="width:100%; height:100%; object-fit:cover; border-radius:4px;" />` :
+                        `<div class="book-spine"></div><span class="library-card-fallback book-icon" style="font-size:24px;">📖</span>`;
+
+                    card.innerHTML = `
+                        <div class="library-card-art book-card-art" style="border: 1px solid var(--border-dark); border-radius: 4px; overflow: hidden; background: linear-gradient(145deg, #18181A, #0f0f11);">
+                            ${artContent}
+                        </div>
+                        <div class="library-card-info" style="padding-top: 8px;">
+                            <div class="library-card-title" style="font-size: 13px; line-height: 1.3em;">${b.title}</div>
+                            <div style="font-size:10px; color:var(--gold-dim); margin-top:2px; font-weight:bold; letter-spacing:0.5px;">⟳ IN PROGRESS</div>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => openBook(b));
+                    scrollContainer.appendChild(card);
+                }
+            }
+        }
+
         filtered.forEach((book, i) => {
             const card = document.createElement('div');
             card.className = 'library-card book-card';

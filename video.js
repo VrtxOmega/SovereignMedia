@@ -134,6 +134,62 @@
             videoGrid.innerHTML = '<div class="playlist-empty" style="grid-column:1/-1;">No videos match your search.</div>';
         }
 
+        // ── Continue Watching Carousel ──
+        let recentHtml = '';
+        if (!filter && !currentShowView) {
+            const recentVideos = videoLibrary.videos.filter(v => {
+                const p = getVideoPosition(v.id);
+                return p && p.currentTime > 10;
+            }).sort((a,b) => {
+                const pa = getVideoPosition(a.id);
+                const pb = getVideoPosition(b.id);
+                return pb.timestamp - pa.timestamp;
+            }).slice(0, 5);
+
+            if (recentVideos.length > 0) {
+                const ds = document.createElement('div');
+                ds.style.gridColumn = '1 / -1';
+                ds.style.marginBottom = '20px';
+                ds.innerHTML = `
+                    <div style="font-family:'Courier New'; font-size:12px; color:var(--gold-dim); font-weight:bold; letter-spacing:1.5px; margin-bottom:12px;">CONTINUE WATCHING</div>
+                    <div id="video-continue-scroll" style="display:flex; overflow-x:auto; gap:16px; padding-bottom:12px;"></div>
+                    <div style="height:1px; background:rgba(212,175,55,0.15); margin-top:8px;"></div>
+                `;
+                videoGrid.appendChild(ds);
+                const scrollContainer = ds.querySelector('#video-continue-scroll');
+                
+                for (const v of recentVideos) {
+                    let thumbHtml = '<span class="library-card-fallback" style="font-size:24px;">🎬</span>';
+                    if (v.poster) thumbHtml = `<img src="${encodeURI(toFileUrl(v.poster))}" onerror="this.style.display='none'">`;
+                    else if (v.showPoster) thumbHtml = `<img src="${encodeURI(toFileUrl(v.showPoster))}" onerror="this.style.display='none'">`;
+                    else if (v.path) {
+                        try {
+                            const tp = await window.omega.video.getThumbnail(v.path);
+                            if (tp) thumbHtml = `<img src="${encodeURI(toFileUrl(tp))}" onerror="this.style.display='none'">`;
+                        } catch(e){}
+                    }
+                    const pos = getVideoPosition(v.id);
+                    const prog = pos && v.duration ? (pos.currentTime / v.duration) * 100 : 0;
+                    const card = document.createElement('div');
+                    card.className = 'library-card video-card';
+                    card.style.flex = '0 0 200px';
+                    card.style.marginBottom = '0';
+                    card.innerHTML = `
+                        <div class="library-card-art video-card-art" style="height:112px;">
+                            ${thumbHtml}
+                            <div style="position:absolute; bottom:0; left:0; height:3px; background:var(--gold); width:${prog}%;"></div>
+                        </div>
+                        <div class="library-card-info" style="padding:8px;">
+                            <div class="library-card-title">${v.title}</div>
+                            <div style="font-size:10px; color:var(--gold-dim); margin-top:2px;">⟳ ${formatTime(pos.currentTime)}</div>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => openVideo(v));
+                    scrollContainer.appendChild(card);
+                }
+            }
+        }
+
         for (const [i, item] of renders.entries()) {
             const card = document.createElement('div');
             card.className = 'library-card video-card';

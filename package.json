@@ -4,7 +4,7 @@
   "description": "Sovereign Media — All-In-One Media Platform",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "node launcher.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
