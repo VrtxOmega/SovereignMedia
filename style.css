@@ -1413,6 +1413,11 @@ body.mode-mini-ribbon .media-seek {
     aspect-ratio: 16/9 !important;
     position: relative;
 }
+
+.video-card-art img {
+    object-fit: contain !important;
+    background: #000;
+}
 .video-duration-badge {
     position: absolute;
     bottom: 6px;
