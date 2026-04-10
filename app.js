@@ -4,6 +4,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-maximize')?.addEventListener('click', () => window.omega.window.maximize());
     document.getElementById('btn-close')?.addEventListener('click', () => window.omega.window.close());
 
+    const qrOverlay = document.getElementById('qr-modal-overlay');
+    const qrImg = document.getElementById('qr-code-img');
+    const qrUrl = document.getElementById('qr-url-text');
+
+    document.getElementById('btn-close-qr')?.addEventListener('click', () => {
+        qrOverlay.classList.add('hidden');
+    });
+
+    document.getElementById('btn-remote-launch')?.addEventListener('click', async () => {
+        if (window.omega && window.omega.remote) {
+            const qrData = await window.omega.remote.getQr();
+            if (qrData) {
+                qrImg.src = qrData.qrDataUrl;
+                qrUrl.textContent = qrData.url;
+                qrOverlay.classList.remove('hidden');
+            } else {
+                showToast("Failed to generate Remote QR code.");
+            }
+        }
+    });
+
     // ── AIO Tab Switching ────────────────────────────────────────────────
     const aioTabs = document.querySelectorAll('.aio-tab');
     const aioPanels = document.querySelectorAll('.aio-panel');
@@ -1088,4 +1109,70 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Init ─────────────────────────────────────────────────────────────
     loadLibraryFromStorage();
+
+    // ── Mobile Remote Bridge ─────────────────────────────────────────────
+    
+    // Send state every 1 second
+    setInterval(() => {
+        if (!window.omega || !window.omega.remote) return;
+        
+        let currentState = {
+            playing: !audioEl.paused,
+            title: trackTitle.textContent,
+            artist: trackArtist.textContent,
+            duration: audioEl.duration || 0,
+            currentTime: audioEl.currentTime || 0,
+            volume: audioEl.volume
+        };
+        
+        // If viewing video tab
+        if (window._omegaActiveTab === 'video') {
+            const videoEl = document.getElementById('video-element');
+            const videoTitle = document.getElementById('media-track-title'); // or whatever the video uses
+            if (videoEl) {
+                currentState.playing = !videoEl.paused;
+                currentState.title = videoTitle ? videoTitle.textContent : 'Video';
+                currentState.artist = 'Sovereign Media Video';
+                currentState.duration = videoEl.duration || 0;
+                currentState.currentTime = videoEl.currentTime || 0;
+                currentState.volume = videoEl.volume;
+            }
+        }
+        
+        // Handle cover image resolving (stripping file:/// if local)
+        if (coverImg.src && !coverImg.classList.contains('hidden')) {
+            let pathUrl = decodeURIComponent(coverImg.src.replace('file:///', ''));
+            // Fix Windows path vs Unix
+            if (!pathUrl.includes('//') && pathUrl.indexOf(':/') !== 1 && navigator.platform.indexOf('Win') === -1) {
+                pathUrl = '/' + pathUrl; 
+            }
+            currentState.coverPath = pathUrl;
+        } else {
+            currentState.coverPath = null;
+        }
+
+        window.omega.remote.sendState(currentState);
+    }, 1000);
+
+    // Listen for incoming actions
+    if (window.omega && window.omega.remote) {
+        window.omega.remote.onAction((action) => {
+            const activeMedia = getActiveMedia();
+            if (!activeMedia) return;
+
+            if (action.type === 'togglePlay') {
+                playBtn.click(); // Standard ui trigger
+            } else if (action.type === 'prev') {
+                prevBtn.click();
+            } else if (action.type === 'next') {
+                nextBtn.click();
+            } else if (action.type === 'volume') {
+                activeMedia.volume = action.value;
+                volSlider.value = action.value;
+                volSlider.style.background = `linear-gradient(to right, var(--gold) ${action.value*100}%, rgba(255,255,255,0.1) ${action.value*100}%)`;
+            } else if (action.type === 'seek') {
+                activeMedia.currentTime = action.value;
+            }
+        });
+    }
 });

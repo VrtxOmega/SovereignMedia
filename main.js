@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const { setupRemote } = require('./mobile_remote.js');
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -110,6 +111,9 @@ function createTray() {
 app.whenReady().then(() => {
     createWindow();
     createTray();
+    
+    // Boot Mobile Remote Controller
+    setupRemote(ipcMain, mainWindow, app);
     
     // ── Media Sync Daemon ────────────────────────────────────────
     try {

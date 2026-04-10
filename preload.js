@@ -23,5 +23,11 @@ contextBridge.exposeInMainWorld('omega', {
         maximize: () => ipcRenderer.send('window:maximize'),
         close:    () => ipcRenderer.send('window:close'),
         setMiniMode: (mode) => ipcRenderer.send('window:setMiniMode', mode)
+    },
+    remote: {
+        sendState: (state) => ipcRenderer.send('remote-state', state),
+        onAction: (callback) => ipcRenderer.on('remote-action', (event, actionData) => callback(actionData)),
+        launchMobile: () => ipcRenderer.invoke('remote-launch'),
+        getQr: () => ipcRenderer.invoke('remote-get-qr')
     }
 });

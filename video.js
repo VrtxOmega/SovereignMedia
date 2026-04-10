@@ -424,8 +424,7 @@
                         const skipBtn = document.getElementById('up-next-skip-btn');
                         if (skipBtn) {
                             skipBtn.onclick = () => {
-                                overlay.classList.add('hidden');
-                                openVideo(nextEpisode);
+                                playNextSeamless(nextEpisode);
                             };
                         }
                     }
@@ -450,7 +449,7 @@
                 if (currentIndex >= 0 && currentIndex + 1 < episodes.length) {
                     const nextEpisode = episodes[currentIndex + 1];
                     console.log("[Video] Auto-playing next episode:", nextEpisode.title);
-                    openVideo(nextEpisode);
+                    playNextSeamless(nextEpisode);
                 }
             }
         });
@@ -467,13 +466,61 @@
         }
     }
 
-    function openVideo(video) {
+    async function playNextSeamless(nextEpisode) {
+        const transitionOverlay = document.getElementById('video-transition-overlay');
+        const upNextOverlay = document.getElementById('video-up-next-overlay');
+        
+        if (upNextOverlay) upNextOverlay.classList.add('hidden');
+        if (transitionOverlay) {
+            transitionOverlay.style.opacity = '1';
+        }
+        
+        // Wait for fade to black
+        await new Promise(r => setTimeout(r, 800));
+        
+        openVideo(nextEpisode, true);
+        
+        const canPlayHandler = () => {
+            if (transitionOverlay) {
+                transitionOverlay.style.opacity = '0';
+            }
+            videoElement.removeEventListener('canplay', canPlayHandler);
+        };
+        videoElement.addEventListener('canplay', canPlayHandler);
+        
+        // Failsafe in case canplay doesn't fire fast enough
+        setTimeout(() => {
+            if (transitionOverlay) transitionOverlay.style.opacity = '0';
+        }, 1500);
+    }
+
+    function openVideo(video, seamless = false) {
         currentVideoData = video;
         videoLibraryEl.classList.add('hidden');
         videoPlayerEl.classList.remove('hidden');
         videoPlayerTitle.textContent = video.title;
 
-        rebuildVideoPlayer();
+        if (!seamless) {
+            rebuildVideoPlayer();
+        } else {
+            // Clean up state manually without destroying DOM
+            videoElement.pause();
+            if (currentSubtitleUrl) {
+                URL.revokeObjectURL(currentSubtitleUrl);
+                currentSubtitleUrl = null;
+            }
+            const oldTracks = videoElement.querySelectorAll('track');
+            oldTracks.forEach(t => t.remove());
+            
+            const subBtn = document.getElementById('video-subtitle-btn');
+            if (subBtn) {
+                subBtn.textContent = "[cc] Add Subtitles";
+                subBtn.style.background = 'rgba(255,215,0,0.1)';
+                subBtn.style.color = 'var(--gold)';
+                subBtn.style.border = '1px solid var(--gold)';
+            }
+        }
+
         videoElement.src = toFileUrl(video.path);
 
         const trackTitle = document.getElementById('media-track-title');
