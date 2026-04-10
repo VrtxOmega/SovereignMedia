@@ -373,6 +373,8 @@
             
             const overlay = document.getElementById('video-up-next-overlay');
             if (overlay) overlay.classList.add('hidden');
+            const posterArea = document.getElementById('up-next-poster');
+            if (posterArea) posterArea.dataset.loaded = '';
         });
 
         videoElement.addEventListener('pause', () => {
@@ -401,6 +403,22 @@
                         const nextEpisode = episodes[currentIndex + 1];
                         const titleEl = document.getElementById('up-next-title');
                         if (titleEl) titleEl.textContent = `S${String(nextEpisode.season).padStart(2,'0')}E${String(nextEpisode.episode).padStart(2,'0')} - ${nextEpisode.title}`;
+                        
+                        const posterArea = document.getElementById('up-next-poster');
+                        if (posterArea && posterArea.dataset.loaded !== 'true') {
+                            posterArea.dataset.loaded = 'true';
+                            let thumbHtml = '<span class="up-next-fallback">🎬</span>';
+                            if (nextEpisode.showPoster) thumbHtml = `<img src="${encodeURI(toFileUrl(nextEpisode.showPoster))}" onerror="this.style.display='none'">`;
+                            else if (nextEpisode.poster) thumbHtml = `<img src="${encodeURI(toFileUrl(nextEpisode.poster))}" onerror="this.style.display='none'">`;
+                            posterArea.innerHTML = thumbHtml;
+                            
+                            if (nextEpisode.path && !nextEpisode.showPoster && !nextEpisode.poster) {
+                                window.omega.video.getThumbnail(nextEpisode.path).then(tp => {
+                                    if (tp) posterArea.innerHTML = `<img src="${encodeURI(toFileUrl(tp))}" onerror="this.style.display='none'">`;
+                                }).catch(()=>{});
+                            }
+                        }
+                        
                         overlay.classList.remove('hidden');
                         
                         const skipBtn = document.getElementById('up-next-skip-btn');

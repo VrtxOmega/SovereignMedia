@@ -248,18 +248,21 @@
                     
                     <!-- Up Next Binge Overlay -->
                     <div id="video-up-next-overlay" class="video-up-next-overlay hidden">
+                        <div id="up-next-poster" class="up-next-poster-area">
+                            <span class="up-next-fallback">🎬</span>
+                        </div>
                         <div class="up-next-content">
-                            <h3 style="margin: 0 0 10px 0; color: #aaa; font-weight: 500; font-size: 16px;">Up Next</h3>
-                            <div class="up-next-title" id="up-next-title" style="font-size: 24px; font-weight: bold; color: var(--gold); margin-bottom: 20px;">Episode Title</div>
-                            <button id="up-next-skip-btn" class="up-next-play-btn" style="background: rgba(255, 215, 0, 0.2); border: 1px solid var(--gold); color: white; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                            <div class="up-next-header">UP NEXT</div>
+                            <div class="up-next-title" id="up-next-title">Episode Title</div>
+                            <button id="up-next-skip-btn" class="up-next-play-btn">
                                 <div class="countdown-ring">
                                     <svg viewBox="0 0 36 36" class="circular-chart gold">
                                         <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                         <path id="up-next-circle" class="circle" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                     </svg>
-                                    <span id="up-next-sec" style="position: absolute; font-size: 12px; top: 50%; left: 50%; transform: translate(-50%, -50%);">10</span>
+                                    <span id="up-next-sec" class="up-next-sec">10</span>
                                 </div>
-                                <span style="position: relative; top: -1px;">Play Now / Skip Credits</span>
+                                <span class="up-next-play-text">Play Now / Skip</span>
                             </button>
                         </div>
                     </div>
