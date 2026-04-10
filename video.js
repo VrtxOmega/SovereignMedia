@@ -25,6 +25,35 @@
     let videoElement = document.getElementById('video-element');
     let currentSubtitleUrl = null;
 
+    // ── NEW: Tab State ──
+    let activeVideoTab = 'movie'; // 'movie' or 'tv'
+    const videoTabMovies = document.getElementById('video-tab-movies');
+    const videoTabTvShows = document.getElementById('video-tab-tvshows');
+
+    if (videoTabMovies && videoTabTvShows) {
+        videoTabMovies.addEventListener('click', () => setVideoTab('movie'));
+        videoTabTvShows.addEventListener('click', () => setVideoTab('tv'));
+    }
+
+    function setVideoTab(type) {
+        activeVideoTab = type;
+        if (type === 'movie') {
+            videoTabMovies.style.background = 'rgba(255,215,0,0.1)';
+            videoTabMovies.style.color = 'var(--gold)';
+            videoTabTvShows.style.background = 'transparent';
+            videoTabTvShows.style.color = 'var(--text-tertiary)';
+            videoSearch.placeholder = "Search movies...";
+        } else {
+            videoTabTvShows.style.background = 'rgba(255,215,0,0.1)';
+            videoTabTvShows.style.color = 'var(--gold)';
+            videoTabMovies.style.background = 'transparent';
+            videoTabMovies.style.color = 'var(--text-tertiary)';
+            videoSearch.placeholder = "Search TV shows...";
+        }
+        currentShowView = null;
+        renderVideoGrid(videoSearch.value);
+    }
+
     if (!videoAddFolder) return;
 
     // ── Position Persistence ──────────────────────────────────────────────
@@ -104,21 +133,28 @@
             const showsMap = new Map();
             const standalone = [];
             for (const v of videoLibrary.videos) {
-                if (v.type === 'tv' && v.show) {
-                    if (!showsMap.has(v.show)) showsMap.set(v.show, []);
-                    showsMap.get(v.show).push(v);
+                if (activeVideoTab === 'tv') {
+                    if (v.type === 'tv' && v.show) {
+                        if (!showsMap.has(v.show)) showsMap.set(v.show, []);
+                        showsMap.get(v.show).push(v);
+                    }
                 } else {
-                    standalone.push(v);
+                    if (v.type !== 'tv' || !v.show) {
+                        standalone.push(v);
+                    }
                 }
             }
-            for (const [showName, episodes] of showsMap.entries()) {
-                if (filter && !showName.toLowerCase().includes(lowerFilter)) continue;
-                episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
-                renders.push({ isShow: true, title: showName, episodes: episodes, repr: episodes[0] });
-            }
-            for (const v of standalone) {
-                if (filter && !v.title.toLowerCase().includes(lowerFilter)) continue;
-                renders.push({ isShow: false, title: v.title, video: v, repr: v });
+            if (activeVideoTab === 'tv') {
+                for (const [showName, episodes] of showsMap.entries()) {
+                    if (filter && !showName.toLowerCase().includes(lowerFilter)) continue;
+                    episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
+                    renders.push({ isShow: true, title: showName, episodes: episodes, repr: episodes[0] });
+                }
+            } else {
+                for (const v of standalone) {
+                    if (filter && !v.title.toLowerCase().includes(lowerFilter)) continue;
+                    renders.push({ isShow: false, title: v.title, video: v, repr: v });
+                }
             }
         } else {
             renders.push({ isBack: true });
@@ -140,6 +176,8 @@
         let recentHtml = '';
         if (!filter && !currentShowView) {
             const recentVideos = videoLibrary.videos.filter(v => {
+                const matchesTab = activeVideoTab === 'tv' ? (v.type === 'tv' && v.show) : (v.type !== 'tv' || !v.show);
+                if (!matchesTab) return false;
                 const p = getVideoPosition(v.id);
                 return p && p.currentTime > 10;
             }).sort((a,b) => {
