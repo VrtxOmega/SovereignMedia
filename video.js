@@ -131,12 +131,25 @@
         let renders = [];
         if (!currentShowView) {
             const showsMap = new Map();
+            const originalShowNames = new Map(); // Store original representation
             const standalone = [];
             for (const v of videoLibrary.videos) {
                 if (activeVideoTab === 'tv') {
                     if (v.type === 'tv' && v.show) {
-                        if (!showsMap.has(v.show)) showsMap.set(v.show, []);
-                        showsMap.get(v.show).push(v);
+                        const lowerName = v.show.toLowerCase();
+                        if (!showsMap.has(lowerName)) {
+                            showsMap.set(lowerName, []);
+                            originalShowNames.set(lowerName, v.show);
+                        }
+                        showsMap.get(lowerName).push(v);
+                        
+                        // If this episode has a poster, try to use its exact name spelling and save it as the poster origin
+                        if (!showsMap.has(lowerName + "_poster") && (v.showPoster || v.poster || v.path)) {
+                            showsMap.set(lowerName + "_poster", v);
+                            if (v.showPoster || v.poster) {
+                                originalShowNames.set(lowerName, v.show); 
+                            }
+                        }
                     }
                 } else {
                     if (v.type !== 'tv' || !v.show) {
@@ -145,10 +158,15 @@
                 }
             }
             if (activeVideoTab === 'tv') {
-                for (const [showName, episodes] of showsMap.entries()) {
+                for (const [lowerName, episodes] of showsMap.entries()) {
+                    if (lowerName.endsWith("_poster")) continue;
+                    const showName = originalShowNames.get(lowerName);
+                    
                     if (filter && !showName.toLowerCase().includes(lowerFilter)) continue;
                     episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
-                    renders.push({ isShow: true, title: showName, episodes: episodes, repr: episodes[0] });
+                    
+                    const posterRepr = showsMap.get(lowerName + "_poster") || episodes[0];
+                    renders.push({ isShow: true, title: showName, episodes: episodes, repr: posterRepr });
                 }
             } else {
                 for (const v of standalone) {
@@ -158,7 +176,7 @@
             }
         } else {
             renders.push({ isBack: true });
-            let episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentShowView);
+            let episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show && v.show.toLowerCase() === currentShowView.toLowerCase());
             episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
             for (const ep of episodes) {
                 const fTitle = ep.title.replace(/Chuck(?:\s*0?\d{1,2}x\d{1,2})?\s*/i, '').trim();
@@ -262,6 +280,14 @@
             } catch(e) {}
 
             if (item.isShow) {
+                const seasons = [...new Set(item.episodes.map(e => parseInt(e.season) || 1))].sort((a,b) => a - b);
+                let seasonText = 'TV Show';
+                if (seasons.length === 1) {
+                    seasonText = `Season ${seasons[0]}`;
+                } else if (seasons.length >= 2) {
+                    seasonText = `Seasons ${seasons[0]}-${seasons[seasons.length-1]}`;
+                }
+
                 card.innerHTML = `
                     <div class="library-card-art video-card-art">
                         ${thumbHtml}
@@ -269,7 +295,7 @@
                     </div>
                     <div class="library-card-info">
                         <div class="library-card-title">${item.title}</div>
-                        <div class="library-card-meta">TV Show</div>
+                        <div class="library-card-meta">${seasonText}</div>
                     </div>
                 `;
                 card.addEventListener('click', () => { currentShowView = item.title; renderVideoGrid(''); });
