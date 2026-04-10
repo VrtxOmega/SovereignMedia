@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('omega', {
         openVideoFolder: () => ipcRenderer.invoke('video:openFolder'),
         getVideoLibrary: () => ipcRenderer.invoke('video:getLibrary'),
         getThumbnail: (filePath) => ipcRenderer.invoke('video:getThumbnail', filePath),
+        autoDownloadSubtitles: (filePath) => ipcRenderer.invoke('video:autoDownloadSubtitles', filePath),
+        extractInternalSubtitles: (filePath) => ipcRenderer.invoke('video:extractInternalSubtitles', filePath),
     },
     window: {
         minimize: () => ipcRenderer.send('window:minimize'),

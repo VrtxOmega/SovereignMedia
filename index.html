@@ -224,9 +224,41 @@
                 <div class="video-player-toolbar">
                     <button class="detail-back-btn" id="video-player-back">← Back to Library</button>
                     <div class="video-player-title" id="video-player-title">-</div>
+                    <div class="video-player-controls" style="display: flex; gap: 8px; align-items: center;">
+                        <!-- Subtitle Size Toggle -->
+                        <div class="video-sub-size-control" style="display: flex; gap: 2px;">
+                            <button class="book-ctrl-btn" id="video-sub-size-down" title="Subtitle Size Down" style="padding: 2px 6px; font-size: 11px;">A-</button>
+                            <button class="book-ctrl-btn" id="video-sub-size-up" title="Subtitle Size Up" style="padding: 2px 6px; font-size: 11px;">A+</button>
+                        </div>
+                        <button id="video-auto-subtitle-btn" title="Auto-Download Subtitles" style="padding: 6px 12px; font-size: 11px; font-family: var(--font-ui); font-weight: 600; background: transparent; border: 1px solid var(--gold); color: var(--gold); opacity: 0.8; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap;">↓ Auto-Fetch</button>
+                        <button id="video-subtitle-btn" title="Add Subtitles" style="padding: 6px 12px; font-size: 11px; font-family: var(--font-ui); font-weight: 600; background: rgba(255,215,0,0.1); border: 1px solid var(--gold); color: var(--gold); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap;">[cc] Subs</button>
+                        <input type="file" id="video-subtitle-input" accept=".vtt,.srt" style="display: none;" />
+                    </div>
                 </div>
-                <div class="video-player-area" id="video-player-area">
-                    <video id="video-element" controls preload="auto"></video>
+                <!-- Video Display Area -->
+                <div class="video-player-area" id="video-player-area" style="position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: calc(100vh - 120px); background: #000;">
+                    <!-- Ambient lighting canvas -->
+                    <canvas id="video-ambilight" class="video-ambilight" width="160" height="90"></canvas>
+                    
+                    <video id="video-element" controls preload="auto" style="position: relative; z-index: 2; width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 0 40px rgba(0,0,0,0.8);"></video>
+                    
+                    <!-- Up Next Binge Overlay -->
+                    <div id="video-up-next-overlay" class="video-up-next-overlay hidden">
+                        <div class="up-next-content">
+                            <h3 style="margin: 0 0 10px 0; color: #aaa; font-weight: 500; font-size: 16px;">Up Next</h3>
+                            <div class="up-next-title" id="up-next-title" style="font-size: 24px; font-weight: bold; color: var(--gold); margin-bottom: 20px;">Episode Title</div>
+                            <button id="up-next-skip-btn" class="up-next-play-btn" style="background: rgba(255, 215, 0, 0.2); border: 1px solid var(--gold); color: white; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                                <div class="countdown-ring">
+                                    <svg viewBox="0 0 36 36" class="circular-chart gold">
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path id="up-next-circle" class="circle" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    </svg>
+                                    <span id="up-next-sec" style="position: absolute; font-size: 12px; top: 50%; left: 50%; transform: translate(-50%, -50%);">10</span>
+                                </div>
+                                <span style="position: relative; top: -1px;">Play Now / Skip Credits</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

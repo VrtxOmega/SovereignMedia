@@ -715,3 +715,39 @@ ipcMain.handle('video:getThumbnail', async (_event, filePath) => {
         });
     });
 });
+
+ipcMain.handle('video:autoDownloadSubtitles', async (_event, filePath) => {
+    return new Promise((resolve) => {
+        // Spawn subliminal python script to fetch English subtitles.
+        execFile('python', ['-m', 'subliminal', 'download', '-l', 'en', filePath], { timeout: 45000 }, (err, stdout, stderr) => {
+            if (err) {
+                 resolve({ success: false, error: err.message, stderr });
+            } else {
+                 resolve({ success: true, output: stdout });
+            }
+        });
+    });
+});
+
+ipcMain.handle('video:extractInternalSubtitles', async (_event, filePath) => {
+    return new Promise((resolve) => {
+        const outPath = filePath.substring(0, filePath.lastIndexOf('.')) + '.internal.vtt';
+        if (fs.existsSync(outPath)) {
+            return resolve({ success: true, path: outPath.replace(/\\/g, '/') });
+        }
+        
+        execFile('ffmpeg', [
+            '-y', '-i', filePath, 
+            '-map', '0:s:0', 
+            '-f', 'webvtt', 
+            outPath
+        ], { timeout: 15000 }, (err, stdout, stderr) => {
+            if (err) {
+                console.error("No internal sub found or extraction failed:", err.message);
+                resolve({ success: false });
+            } else {
+                resolve({ success: true, path: outPath.replace(/\\/g, '/') });
+            }
+        });
+    });
+});

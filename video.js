@@ -9,6 +9,7 @@
     let videoLibrary = null;
     let currentVideoData = null;
     const VIDEO_POS_KEY = 'sovereign_video_positions';
+    let ambilightRafId = null;
 
     // ── Elements ──────────────────────────────────────────────────────────
     const videoAddFolder = document.getElementById('video-add-folder');
@@ -21,7 +22,8 @@
     const videoPlayerEl = document.getElementById('video-player');
     const videoPlayerBack = document.getElementById('video-player-back');
     const videoPlayerTitle = document.getElementById('video-player-title');
-    const videoElement = document.getElementById('video-element');
+    let videoElement = document.getElementById('video-element');
+    let currentSubtitleUrl = null;
 
     if (!videoAddFolder) return;
 
@@ -266,12 +268,130 @@
     videoSearch.addEventListener('input', (e) => renderVideoGrid(e.target.value));
 
     // ── Open Video ────────────────────────────────────────────────────────
+    function rebuildVideoPlayer() {
+        if (!videoElement) return;
+        
+        // 1. Teardown existing internal decoder & free memory completely
+        videoElement.pause();
+        videoElement.removeAttribute('src');
+        videoElement.load();
+        
+        // 2. Rebuild DOM element to prevent Chrome timing drift
+        const parent = videoElement.parentNode;
+        const newVideo = document.createElement('video');
+        newVideo.id = 'video-element';
+        newVideo.controls = true;
+        newVideo.preload = 'auto';
+        newVideo.style.position = 'relative';
+        newVideo.style.zIndex = '2';
+        newVideo.style.width = '100%';
+        newVideo.style.maxHeight = '100%';
+        newVideo.style.objectFit = 'contain';
+        newVideo.style.boxShadow = '0 0 40px rgba(0,0,0,0.8)';
+        parent.replaceChild(newVideo, videoElement);
+        videoElement = newVideo;
+        
+        // 3. Rebind dynamic events to the fresh instance
+        const ambilightCanvas = document.getElementById('video-ambilight');
+        const ambilightCtx = ambilightCanvas ? ambilightCanvas.getContext('2d') : null;
+        
+        function renderAmbilight() {
+            if (!videoElement.paused && !videoElement.ended && ambilightCtx) {
+                // Downscale draw for performance (keeps massive blur entirely on GPU)
+                ambilightCtx.drawImage(videoElement, 0, 0, ambilightCanvas.width, ambilightCanvas.height);
+            }
+            ambilightRafId = requestAnimationFrame(renderAmbilight);
+        }
+
+        videoElement.addEventListener('play', () => {
+            if (ambilightRafId) cancelAnimationFrame(ambilightRafId);
+            ambilightRafId = requestAnimationFrame(renderAmbilight);
+            
+            const overlay = document.getElementById('video-up-next-overlay');
+            if (overlay) overlay.classList.add('hidden');
+        });
+
+        videoElement.addEventListener('pause', () => {
+            if (currentVideoData) {
+                saveVideoPosition(currentVideoData.id, videoElement.currentTime);
+            }
+            if (ambilightRafId) {
+                cancelAnimationFrame(ambilightRafId);
+                ambilightRafId = null;
+            }
+        });
+        
+        // "Up Next" binge watching logic
+        videoElement.addEventListener('timeupdate', () => {
+            if (!currentVideoData || currentVideoData.type !== 'tv' || !currentVideoData.show) return;
+            const remaining = videoElement.duration - videoElement.currentTime;
+            const overlay = document.getElementById('video-up-next-overlay');
+            if (!overlay) return;
+
+            if (remaining > 0 && remaining <= 12) {
+                if (overlay.classList.contains('hidden')) {
+                    const episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentVideoData.show);
+                    episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
+                    const currentIndex = episodes.findIndex(v => v.id === currentVideoData.id);
+                    if (currentIndex >= 0 && currentIndex + 1 < episodes.length) {
+                        const nextEpisode = episodes[currentIndex + 1];
+                        const titleEl = document.getElementById('up-next-title');
+                        if (titleEl) titleEl.textContent = `S${String(nextEpisode.season).padStart(2,'0')}E${String(nextEpisode.episode).padStart(2,'0')} - ${nextEpisode.title}`;
+                        overlay.classList.remove('hidden');
+                        
+                        const skipBtn = document.getElementById('up-next-skip-btn');
+                        if (skipBtn) {
+                            skipBtn.onclick = () => {
+                                overlay.classList.add('hidden');
+                                openVideo(nextEpisode);
+                            };
+                        }
+                    }
+                }
+                const circle = document.getElementById('up-next-circle');
+                const secText = document.getElementById('up-next-sec');
+                if (circle && secText) {
+                    const progressStr = Math.max(0, (remaining / 12) * 100);
+                    circle.setAttribute('stroke-dasharray', `${progressStr}, 100`);
+                    secText.textContent = Math.ceil(remaining);
+                }
+            } else {
+                overlay.classList.add('hidden');
+            }
+        });
+
+        videoElement.addEventListener('ended', () => {
+            if (currentVideoData && currentVideoData.type === 'tv' && currentVideoData.show) {
+                const episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentVideoData.show);
+                episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
+                const currentIndex = episodes.findIndex(v => v.id === currentVideoData.id);
+                if (currentIndex >= 0 && currentIndex + 1 < episodes.length) {
+                    const nextEpisode = episodes[currentIndex + 1];
+                    console.log("[Video] Auto-playing next episode:", nextEpisode.title);
+                    openVideo(nextEpisode);
+                }
+            }
+        });
+        
+        // 4. Reset subtitles state visually
+        if (currentSubtitleUrl) {
+            URL.revokeObjectURL(currentSubtitleUrl);
+            currentSubtitleUrl = null;
+        }
+        const subBtn = document.getElementById('video-subtitle-btn');
+        if (subBtn) {
+            subBtn.textContent = "[cc] Add Subtitles";
+            subBtn.style.background = 'rgba(255,215,0,0.1)';
+        }
+    }
+
     function openVideo(video) {
         currentVideoData = video;
         videoLibraryEl.classList.add('hidden');
         videoPlayerEl.classList.remove('hidden');
         videoPlayerTitle.textContent = video.title;
 
+        rebuildVideoPlayer();
         videoElement.src = toFileUrl(video.path);
 
         const trackTitle = document.getElementById('media-track-title');
@@ -296,35 +416,145 @@
             }
         });
 
+        // ── Auto-Extract & Load Internal Perfectly Synced Subs ──
+        if (window.omega && window.omega.video && window.omega.video.extractInternalSubtitles) {
+            window.omega.video.extractInternalSubtitles(video.path).then(res => {
+                if (res && res.success && res.path) {
+                    console.log("[SovereignMedia] Auto-loaded internal MKV subtitle:", res.path);
+                    const trackId = 'internal-sub-track';
+                    let oldTrack = document.getElementById(trackId);
+                    if (oldTrack) oldTrack.remove();
+                    
+                    const track = document.createElement('track');
+                    track.id = trackId;
+                    track.src = toFileUrl(res.path);
+                    track.kind = 'subtitles';
+                    track.srclang = 'en';
+                    track.label = 'Internal (Perfect Sync)';
+                    track.default = true;
+                    videoElement.appendChild(track);
+                    
+                    const subBtn = document.getElementById('video-subtitle-btn');
+                    if (subBtn) {
+                        subBtn.textContent = "[cc] Internal Synced";
+                        subBtn.style.background = 'var(--gold)';
+                        subBtn.style.color = '#000';
+                        subBtn.style.border = '1px solid var(--gold)';
+                    }
+                }
+            }).catch(console.error);
+        }
+
         videoElement.play().catch(console.error);
     }
 
     // Auto-save position
-    if (videoElement) {
-        setInterval(() => {
-            if (currentVideoData && !videoElement.paused && videoElement.currentTime > 0) {
-                saveVideoPosition(currentVideoData.id, videoElement.currentTime);
-            }
-        }, 5000);
+    setInterval(() => {
+        if (currentVideoData && videoElement && !videoElement.paused && videoElement.currentTime > 0) {
+            saveVideoPosition(currentVideoData.id, videoElement.currentTime);
+        }
+    }, 5000);
 
+    // Initial binding for first load (in case they don't open a video first)
+    if (videoElement) {
         videoElement.addEventListener('pause', () => {
-            if (currentVideoData) {
-                saveVideoPosition(currentVideoData.id, videoElement.currentTime);
+            if (currentVideoData) saveVideoPosition(currentVideoData.id, videoElement.currentTime);
+        });
+    }
+
+    // ── Subtitles ─────────────────────────────────────────────────────────
+    const subBtn = document.getElementById('video-subtitle-btn');
+    const subInput = document.getElementById('video-subtitle-input');
+    const autoSubBtn = document.getElementById('video-auto-subtitle-btn');
+
+    if (autoSubBtn) {
+        autoSubBtn.addEventListener('click', async () => {
+            if (!currentVideoData || !currentVideoData.path) return;
+            autoSubBtn.disabled = true;
+            autoSubBtn.textContent = '⏱ Downloading...';
+            autoSubBtn.style.opacity = '0.5';
+
+            try {
+                const res = await window.omega.video.autoDownloadSubtitles(currentVideoData.path);
+                if (res && res.success) {
+                    console.log("Subliminal result:", res.output);
+                    if (res.output.includes("Downloaded 1 subtitle") || res.output.includes("Downloaded 2 subtitle")) {
+                        autoSubBtn.textContent = '✔ Downloaded!';
+                        autoSubBtn.style.opacity = '1';
+                        autoSubBtn.style.background = 'var(--gold)';
+                        autoSubBtn.style.color = '#000';
+                        alert("Subtitle downloaded successfully!\nIt has been saved next to the video file.\nPlease use the '[cc] Add Subtitles' button to load it.");
+                    } else if (res.output.includes("Downloaded 0 subtitle")) {
+                        autoSubBtn.textContent = '❌ No subs found';
+                        alert("Could not find any English subtitles for this video.");
+                    } else {
+                        autoSubBtn.textContent = '✔ Complete';
+                    }
+                } else {
+                    console.error("Auto-fetch error:", res.error, res.stderr);
+                    autoSubBtn.textContent = '❌ Error';
+                    alert("Subtitle download failed: " + res.error);
+                }
+            } catch (e) {
+                console.error(e);
+                autoSubBtn.textContent = '❌ Error';
             }
+            
+            setTimeout(() => {
+                autoSubBtn.disabled = false;
+                autoSubBtn.textContent = '↓ Auto-Fetch';
+                autoSubBtn.style.opacity = '0.8';
+                autoSubBtn.style.background = 'transparent';
+                autoSubBtn.style.color = 'var(--gold)';
+                autoSubBtn.style.border = '1px solid var(--gold)';
+            }, 6000);
+        });
+    }
+
+    if (subBtn && subInput) {
+        subBtn.addEventListener('click', () => {
+            subInput.click();
         });
 
-        // Autoplay next episode
-        videoElement.addEventListener('ended', () => {
-            if (currentVideoData && currentVideoData.type === 'tv' && currentVideoData.show) {
-                const episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentVideoData.show);
-                episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
-                const currentIndex = episodes.findIndex(v => v.id === currentVideoData.id);
-                if (currentIndex >= 0 && currentIndex + 1 < episodes.length) {
-                    const nextEpisode = episodes[currentIndex + 1];
-                    console.log("[Video] Auto-playing next episode:", nextEpisode.title);
-                    openVideo(nextEpisode);
+        subInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                let text = ev.target.result;
+                // Convert SRT to VTT if needed
+                if (!text.trim().startsWith('WEBVTT')) {
+                    text = 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
                 }
-            }
+
+                const blob = new Blob([text], { type: 'text/vtt' });
+                if (currentSubtitleUrl) URL.revokeObjectURL(currentSubtitleUrl);
+                currentSubtitleUrl = URL.createObjectURL(blob);
+
+                // Remove old tracks
+                const oldTracks = videoElement.querySelectorAll('track');
+                oldTracks.forEach(t => t.remove());
+
+                // Add new track
+                const track = document.createElement('track');
+                track.kind = 'subtitles';
+                track.label = file.name;
+                track.srclang = 'en';
+                track.src = currentSubtitleUrl;
+                track.default = true;
+                videoElement.appendChild(track);
+                
+                // Force track to show
+                if (videoElement.textTracks && videoElement.textTracks.length > 0) {
+                    videoElement.textTracks[0].mode = 'showing';
+                }
+                
+                subBtn.textContent = "[cc] " + file.name;
+                subBtn.style.background = 'var(--gold)';
+                subBtn.style.color = '#000';
+            };
+            reader.readAsText(file);
         });
     }
 
@@ -339,6 +569,37 @@
         currentVideoData = null;
         renderVideoGrid(videoSearch.value);
     });
+
+    // ── Subtitle Sizing Controls ──────────────────────────────────────────
+    const sizeDown = document.getElementById('video-sub-size-down');
+    const sizeUp = document.getElementById('video-sub-size-up');
+    const playerArea = document.getElementById('video-player-area');
+    
+    // Default size is md. If no class, assume md.
+    const sizes = ['sub-size-sm', 'sub-size-md', 'sub-size-lg'];
+    let currentSizeIdx = 1;
+
+    function applySubSize() {
+        if (!playerArea) return;
+        playerArea.classList.remove(...sizes);
+        playerArea.classList.add(sizes[currentSizeIdx]);
+    }
+
+    if (sizeDown) {
+        sizeDown.addEventListener('click', () => {
+            currentSizeIdx = Math.max(0, currentSizeIdx - 1);
+            applySubSize();
+        });
+    }
+
+    if (sizeUp) {
+        sizeUp.addEventListener('click', () => {
+            currentSizeIdx = Math.min(sizes.length - 1, currentSizeIdx + 1);
+            applySubSize();
+        });
+    }
+    
+    applySubSize();
 
     // ── Init ──────────────────────────────────────────────────────────────
     window._sovereignVideoInit = loadVideoLibrary;
