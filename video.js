@@ -359,6 +359,7 @@
         const newVideo = document.createElement('video');
         newVideo.id = 'video-element';
         newVideo.controls = true;
+        newVideo.setAttribute('controlslist', 'nofullscreen');
         newVideo.preload = 'auto';
         newVideo.style.position = 'relative';
         newVideo.style.zIndex = '2';
@@ -380,6 +381,17 @@
             }
             ambilightRafId = requestAnimationFrame(renderAmbilight);
         }
+
+        videoElement.addEventListener('dblclick', () => {
+            const videoArea = document.getElementById('video-player-area');
+            if (videoArea) {
+                if (!document.fullscreenElement) {
+                    videoArea.requestFullscreen().catch(err => console.error("Fullscreen error:", err));
+                } else {
+                    document.exitFullscreen().catch(err => console.error("Exit fullscreen error:", err));
+                }
+            }
+        });
 
         videoElement.addEventListener('play', () => {
             if (ambilightRafId) cancelAnimationFrame(ambilightRafId);
