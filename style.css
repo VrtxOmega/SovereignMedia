@@ -1431,6 +1431,38 @@ body.mode-mini-ribbon .media-seek {
     z-index: 3;
 }
 
+/* Watched Badge — gold checkmark */
+.video-watched-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 22px;
+    height: 22px;
+    background: var(--gold);
+    color: #000;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    z-index: 4;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    animation: fadeUpIn 0.3s ease both;
+}
+
+/* Progress Bar — gold strip at bottom of card art */
+.video-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), rgba(212, 175, 55, 0.7));
+    z-index: 4;
+    border-radius: 0 2px 0 0;
+    transition: width 0.3s ease;
+}
+
 /* ══════════════════════════════════════════════════════════════
    17. VIDEO PLAYER — The Screening Room
    ══════════════════════════════════════════════════════════════ */

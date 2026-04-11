@@ -321,11 +321,15 @@
                     resumeHint = `<div style="font-size:10px; color:var(--gold-dim); margin-top:2px;">⟳ ${formatTime(savedPos.currentTime)}</div>`;
                 }
                 const durStr = video.duration > 0 ? formatTime(video.duration) : '';
+                const watchProgress = savedPos && video.duration > 0 ? Math.min(100, (savedPos.currentTime / video.duration) * 100) : 0;
+                const isWatched = video.duration > 0 && savedPos && savedPos.currentTime >= video.duration - 5;
 
                 card.innerHTML = `
                     <div class="library-card-art video-card-art">
                         ${thumbHtml}
                         ${durStr ? `<div class="video-duration-badge">${durStr}</div>` : ''}
+                        ${isWatched ? `<div class="video-watched-badge" title="Watched">✓</div>` : ''}
+                        ${watchProgress > 0 ? `<div class="video-progress-bar" style="width:${watchProgress}%"></div>` : ''}
                     </div>
                     <div class="library-card-info">
                         <div class="library-card-title" title="${item.title}">${item.title}</div>
@@ -563,17 +567,20 @@
             coverFallback.classList.remove('hidden');
         }
         
-        // Restore position
+        // Restore position & start playback AFTER metadata is ready
+        // (prevents audio/video decoder desync from seeking during active playback)
         const savedPos = getVideoPosition(video.id);
         videoElement.addEventListener('loadedmetadata', function onLoad() {
             videoElement.removeEventListener('loadedmetadata', onLoad);
             if (savedPos && savedPos.currentTime > 10) {
                 if (videoElement.duration && videoElement.duration > 0 && savedPos.currentTime >= videoElement.duration - 5) {
-                    videoElement.currentTime = 0;
+                    // Fully watched — clear stale position, start fresh (no redundant seek)
+                    saveVideoPosition(video.id, 0);
                 } else {
                     videoElement.currentTime = savedPos.currentTime;
                 }
             }
+            videoElement.play().catch(console.error);
         });
 
         // ── Auto-Extract & Load Internal Perfectly Synced Subs ──
@@ -605,7 +612,7 @@
             }).catch(console.error);
         }
 
-        videoElement.play().catch(console.error);
+        // play() is now called inside loadedmetadata to prevent decoder desync
     }
 
     // Auto-save position
@@ -760,6 +767,133 @@
     }
     
     applySubSize();
+
+    // ── Optimize Library Button ───────────────────────────────────────────
+    const optimizeBtn = document.getElementById('video-optimize-btn');
+    if (optimizeBtn) {
+        optimizeBtn.addEventListener('click', async () => {
+            optimizeBtn.disabled = true;
+            optimizeBtn.textContent = '⏳ Optimizing...';
+            optimizeBtn.style.opacity = '0.6';
+
+            // Listen for real-time progress
+            if (window.omega.video.onOptimizeProgress) {
+                window.omega.video.onOptimizeProgress((data) => {
+                    optimizeBtn.textContent = `⚡ ${data.current}/${data.total}`;
+                });
+            }
+
+            try {
+                const result = await window.omega.video.optimizeLibrary();
+                if (result && result.success) {
+                    if (result.total === 0) {
+                        optimizeBtn.textContent = '✔ All files optimized';
+                    } else {
+                        optimizeBtn.textContent = `✔ ${result.converted}/${result.total} converted`;
+                        // Reload the library to pick up new MP4 paths
+                        const refreshed = await window.omega.video.refreshVideoFolder();
+                        if (refreshed && refreshed.videos) {
+                            videoLibrary = refreshed;
+                            renderVideoGrid(videoSearch.value);
+                        }
+                    }
+                } else {
+                    optimizeBtn.textContent = '❌ Error';
+                }
+            } catch (e) {
+                console.error('[Optimizer]', e);
+                optimizeBtn.textContent = '❌ Error';
+            }
+
+            setTimeout(() => {
+                optimizeBtn.disabled = false;
+                optimizeBtn.textContent = '⚡ Optimize';
+                optimizeBtn.style.opacity = '1';
+            }, 5000);
+        });
+    }
+
+    // ── Keyboard Shortcuts (Couch Mode) ───────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+        // Only handle shortcuts when in video player view
+        if (!videoPlayerEl || videoPlayerEl.classList.contains('hidden')) return;
+        if (!videoElement) return;
+
+        // Don't intercept when user is typing in an input
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+        switch (e.key) {
+            case ' ':
+                e.preventDefault();
+                if (videoElement.paused) videoElement.play().catch(() => {});
+                else videoElement.pause();
+                break;
+
+            case 'ArrowLeft':
+                e.preventDefault();
+                videoElement.currentTime = Math.max(0, videoElement.currentTime - (e.shiftKey ? 30 : 10));
+                break;
+
+            case 'ArrowRight':
+                e.preventDefault();
+                videoElement.currentTime = Math.min(videoElement.duration || 0, videoElement.currentTime + (e.shiftKey ? 30 : 10));
+                break;
+
+            case 'ArrowUp':
+                e.preventDefault();
+                videoElement.volume = Math.min(1, videoElement.volume + 0.05);
+                break;
+
+            case 'ArrowDown':
+                e.preventDefault();
+                videoElement.volume = Math.max(0, videoElement.volume - 0.05);
+                break;
+
+            case 'f':
+            case 'F': {
+                const videoArea = document.getElementById('video-player-area');
+                if (videoArea) {
+                    if (!document.fullscreenElement) videoArea.requestFullscreen().catch(() => {});
+                    else document.exitFullscreen().catch(() => {});
+                }
+                break;
+            }
+
+            case 's':
+            case 'S':
+                // Toggle subtitle visibility
+                if (videoElement.textTracks && videoElement.textTracks.length > 0) {
+                    const track = videoElement.textTracks[0];
+                    track.mode = track.mode === 'showing' ? 'hidden' : 'showing';
+                }
+                break;
+
+            case 'm':
+            case 'M':
+                videoElement.muted = !videoElement.muted;
+                break;
+
+            case 'n':
+            case 'N':
+                // Skip to next episode
+                if (currentVideoData && currentVideoData.type === 'tv' && currentVideoData.show && videoLibrary) {
+                    const episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentVideoData.show);
+                    episodes.sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+                    const currentIndex = episodes.findIndex(v => v.id === currentVideoData.id);
+                    if (currentIndex >= 0 && currentIndex + 1 < episodes.length) {
+                        playNextSeamless(episodes[currentIndex + 1]);
+                    }
+                }
+                break;
+
+            case 'Escape':
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                }
+                break;
+        }
+    });
 
     // ── Init ──────────────────────────────────────────────────────────────
     window._sovereignVideoInit = loadVideoLibrary;

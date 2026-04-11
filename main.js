@@ -771,3 +771,68 @@ ipcMain.handle('video:extractInternalSubtitles', async (_event, filePath) => {
         });
     });
 });
+
+// ── Bulk Library Optimizer — MKV→MP4 Remux ──────────────────────────────
+ipcMain.handle('video:optimizeLibrary', async () => {
+    if (!fs.existsSync(videoDataPath)) return { success: false, error: 'No library' };
+    let libraryData;
+    try {
+        libraryData = JSON.parse(fs.readFileSync(videoDataPath, 'utf8'));
+    } catch (e) {
+        return { success: false, error: 'Failed to parse library' };
+    }
+    if (!libraryData || !libraryData.videos) return { success: false, error: 'Empty library' };
+
+    const mkvFiles = libraryData.videos.filter(v => v.path.toLowerCase().endsWith('.mkv'));
+    if (mkvFiles.length === 0) return { success: true, converted: 0, total: 0 };
+
+    let converted = 0;
+    const total = mkvFiles.length;
+
+    for (const video of mkvFiles) {
+        const srcPath = video.path;
+        const mp4Path = srcPath.substring(0, srcPath.lastIndexOf('.')) + '.mp4';
+
+        // Skip if MP4 already exists alongside the MKV
+        if (fs.existsSync(mp4Path)) {
+            converted++;
+            if (mainWindow) mainWindow.webContents.send('optimize-progress', { current: converted, total, file: path.basename(srcPath), status: 'skipped' });
+            continue;
+        }
+
+        try {
+            await new Promise((resolve, reject) => {
+                execFile('ffmpeg', [
+                    '-y', '-i', srcPath,
+                    '-c:v', 'copy', '-c:a', 'copy',
+                    '-map', '0:v', '-map', '0:a',
+                    mp4Path
+                ], { timeout: 120000 }, (err) => {
+                    if (err) return reject(err);
+                    resolve();
+                });
+            });
+
+            // Rename old MKV to .mkv.bak
+            const bakPath = srcPath + '.bak';
+            fs.renameSync(srcPath, bakPath);
+
+            // Update library JSON entry to point to the new MP4
+            video.path = mp4Path;
+            video.filename = path.basename(mp4Path);
+
+            converted++;
+            if (mainWindow) mainWindow.webContents.send('optimize-progress', { current: converted, total, file: path.basename(mp4Path), status: 'converted' });
+        } catch (e) {
+            console.error(`[Optimizer] Failed to remux ${srcPath}:`, e.message);
+            // Clean up partial MP4 if it exists
+            if (fs.existsSync(mp4Path)) try { fs.unlinkSync(mp4Path); } catch (_) {}
+            converted++;
+            if (mainWindow) mainWindow.webContents.send('optimize-progress', { current: converted, total, file: path.basename(srcPath), status: 'error' });
+        }
+    }
+
+    // Save updated library with new file paths
+    fs.writeFileSync(videoDataPath, JSON.stringify(libraryData), 'utf8');
+    return { success: true, converted, total };
+});
