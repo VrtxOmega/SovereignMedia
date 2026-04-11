@@ -1136,6 +1136,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentState.duration = videoEl.duration || 0;
                 currentState.currentTime = videoEl.currentTime || 0;
                 currentState.volume = videoEl.volume;
+                
+                // Embed the video poster/cover
+                if (window._omegaVideoCurrentData) {
+                    const vd = window._omegaVideoCurrentData;
+                    if (vd.showPoster || vd.poster) {
+                        currentState.coverPath = 'file:///' + (vd.showPoster || vd.poster).replace(/\\/g, '/');
+                    } else if (vd.path) {
+                         // As a fallback, we pass the video path. The remote might not have thumbnails extracted immediately, but it avoids broken audio covers.
+                         currentState.coverPath = null; 
+                    }
+                } else {
+                    currentState.coverPath = null;
+                }
             }
         }
         

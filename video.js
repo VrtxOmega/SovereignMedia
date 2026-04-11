@@ -13,6 +13,7 @@
 
     // ── Elements ──────────────────────────────────────────────────────────
     const videoAddFolder = document.getElementById('video-add-folder');
+    const videoRefreshFolder = document.getElementById('video-refresh-folder');
     const videoSearch = document.getElementById('video-search');
     const videoSearchCount = document.getElementById('video-search-count');
     const videoGridContainer = document.getElementById('video-grid-container');
@@ -110,8 +111,21 @@
         videoAddFolder.textContent = "⏳ Scanning videos...";
         videoAddFolder.classList.add('scanning');
         const result = await window.omega.video.openVideoFolder();
-        videoAddFolder.textContent = "📂 Add/Refresh Video Folder";
+        videoAddFolder.textContent = "📂 Add Folder";
         videoAddFolder.classList.remove('scanning');
+
+        if (result && result.videos) {
+            videoLibrary = result;
+            renderVideoGrid();
+        }
+    });
+
+    videoRefreshFolder.addEventListener('click', async () => {
+        videoRefreshFolder.textContent = "⏳ Refreshing...";
+        videoRefreshFolder.classList.add('scanning');
+        const result = await window.omega.video.refreshVideoFolder();
+        videoRefreshFolder.textContent = "🔄 Refresh";
+        videoRefreshFolder.classList.remove('scanning');
 
         if (result && result.videos) {
             videoLibrary = result;
@@ -496,6 +510,7 @@
 
     function openVideo(video, seamless = false) {
         currentVideoData = video;
+        window._omegaVideoCurrentData = video; // Expose for mobile remote sync
         videoLibraryEl.classList.add('hidden');
         videoPlayerEl.classList.remove('hidden');
         videoPlayerTitle.textContent = video.title;

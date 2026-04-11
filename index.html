@@ -216,7 +216,10 @@
             <!-- Video Library View -->
             <div class="video-library" id="video-library">
                 <div class="video-library-header">
-                    <button class="media-local-folder-btn" id="video-add-folder">📂 Add/Refresh Video Folder</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="media-local-folder-btn" id="video-add-folder" style="padding: 0 12px;">📂 Add Folder</button>
+                        <button class="media-local-folder-btn" id="video-refresh-folder" style="padding: 0 12px; background: rgba(255, 255, 255, 0.05);">🔄 Refresh</button>
+                    </div>
                     <div class="video-tabs" id="video-tabs" style="display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.5); padding: 4px; border-radius: 8px; border: 1px solid rgba(255, 215, 0, 0.1);">
                         <button class="video-tab active" data-type="movie" id="video-tab-movies" style="padding: 6px 16px; border: none; background: rgba(255,215,0,0.1); color: var(--gold); border-radius: 6px; cursor: pointer; font-family: var(--font-ui); font-weight: 600; font-size: 13px; transition: 0.2s;">🎬 Movies</button>
                         <button class="video-tab" data-type="tv" id="video-tab-tvshows" style="padding: 6px 16px; border: none; background: transparent; color: var(--text-tertiary); border-radius: 6px; cursor: pointer; font-family: var(--font-ui); font-weight: 600; font-size: 13px; transition: 0.2s;">📺 TV Shows</button>

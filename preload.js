@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('omega', {
     },
     video: {
         openVideoFolder: () => ipcRenderer.invoke('video:openFolder'),
+        refreshVideoFolder: () => ipcRenderer.invoke('video:refreshFolder'),
         getVideoLibrary: () => ipcRenderer.invoke('video:getLibrary'),
         getThumbnail: (filePath) => ipcRenderer.invoke('video:getThumbnail', filePath),
         autoDownloadSubtitles: (filePath) => ipcRenderer.invoke('video:autoDownloadSubtitles', filePath),

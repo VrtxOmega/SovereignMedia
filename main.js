@@ -568,7 +568,23 @@ ipcMain.handle('video:openFolder', async () => {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
 
-    const startFolder = result.filePaths[0];
+    return await scanVideoLibrary(result.filePaths[0]);
+});
+
+ipcMain.handle('video:refreshFolder', async () => {
+    if (!fs.existsSync(videoDataPath)) return null;
+    try {
+        const libraryData = JSON.parse(fs.readFileSync(videoDataPath, 'utf8'));
+        if (libraryData && libraryData.path) {
+            return await scanVideoLibrary(libraryData.path);
+        }
+    } catch (e) {
+        console.error('Failed to parse existing video library JSON', e);
+    }
+    return null;
+});
+
+async function scanVideoLibrary(startFolder) {
     const videos = [];
     const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v', '.wmv'];
 
@@ -695,7 +711,7 @@ ipcMain.handle('video:openFolder', async () => {
     const libraryData = { path: startFolder, videos };
     fs.writeFileSync(videoDataPath, JSON.stringify(libraryData), 'utf8');
     return libraryData;
-});
+}
 
 ipcMain.handle('video:getThumbnail', async (_event, filePath) => {
     const id = crypto.createHash('sha256').update(filePath).digest('hex').substring(0, 16);
