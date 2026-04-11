@@ -420,7 +420,7 @@
             const overlay = document.getElementById('video-up-next-overlay');
             if (!overlay) return;
 
-            if (remaining > 0 && remaining <= 12) {
+            if (remaining > 0 && remaining <= 30) {
                 if (overlay.classList.contains('hidden')) {
                     const episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show === currentVideoData.show);
                     episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
@@ -458,7 +458,7 @@
                 const circle = document.getElementById('up-next-circle');
                 const secText = document.getElementById('up-next-sec');
                 if (circle && secText) {
-                    const progressStr = Math.max(0, (remaining / 12) * 100);
+                    const progressStr = Math.max(0, (remaining / 30) * 100);
                     circle.setAttribute('stroke-dasharray', `${progressStr}, 100`);
                     secText.textContent = Math.ceil(remaining);
                 }
@@ -568,7 +568,11 @@
         videoElement.addEventListener('loadedmetadata', function onLoad() {
             videoElement.removeEventListener('loadedmetadata', onLoad);
             if (savedPos && savedPos.currentTime > 10) {
-                videoElement.currentTime = savedPos.currentTime;
+                if (videoElement.duration && videoElement.duration > 0 && savedPos.currentTime >= videoElement.duration - 5) {
+                    videoElement.currentTime = 0;
+                } else {
+                    videoElement.currentTime = savedPos.currentTime;
+                }
             }
         });
 
