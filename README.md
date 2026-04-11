@@ -1,5 +1,10 @@
 # Ω Sovereign Media
 
+> [!WARNING]
+> **STATUS: PROJECT COMPLETELY FROZEN**
+> This project has been sealed and locked by the VERITAS Ω command. Do not touch or modify the core functionality.
+
+
 Premium standalone all-in-one media platform built with Electron.
 
 ---
