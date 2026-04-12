@@ -862,6 +862,8 @@
 
             case 's':
             case 'S':
+            case 'c':
+            case 'C':
                 // Toggle subtitle visibility
                 if (videoElement.textTracks && videoElement.textTracks.length > 0) {
                     const track = videoElement.textTracks[0];
