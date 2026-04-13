@@ -26,6 +26,22 @@
     let videoElement = document.getElementById('video-element');
     let currentSubtitleUrl = null;
 
+    // ── Immersive Player Idle Tracking ──
+    let videoIdleTimeout = null;
+    function resetVideoIdleTimer() {
+        if (videoPlayerEl.classList.contains('hidden')) return;
+        videoPlayerEl.classList.remove('idle');
+        if (videoIdleTimeout) clearTimeout(videoIdleTimeout);
+        videoIdleTimeout = setTimeout(() => {
+            if (videoElement && !videoElement.paused) {
+                videoPlayerEl.classList.add('idle');
+            }
+        }, 3000);
+    }
+    videoPlayerEl.addEventListener('mousemove', resetVideoIdleTimer);
+    videoPlayerEl.addEventListener('click', resetVideoIdleTimer);
+    videoPlayerEl.addEventListener('touchstart', resetVideoIdleTimer);
+
     // ── NEW: Tab State ──
     let activeVideoTab = 'movie'; // 'movie' or 'tv'
     const videoTabMovies = document.getElementById('video-tab-movies');
@@ -52,6 +68,7 @@
             videoSearch.placeholder = "Search TV shows...";
         }
         currentShowView = null;
+        currentSeasonView = null;
         renderVideoGrid(videoSearch.value);
     }
 
@@ -135,6 +152,7 @@
 
     // ── Video Grid Rendering ──────────────────────────────────────────────
     let currentShowView = null; // null = Main Library, otherwise Show Name
+    let currentSeasonView = null; // null = Show Level, otherwise Season Number
 
     async function renderVideoGrid(filter = '') {
         if (!videoLibrary || !videoLibrary.videos) return;
@@ -182,16 +200,44 @@
                     const posterRepr = showsMap.get(lowerName + "_poster") || episodes[0];
                     renders.push({ isShow: true, title: showName, episodes: episodes, repr: posterRepr });
                 }
+                renders.sort((a,b) => a.title.localeCompare(b.title));
             } else {
                 for (const v of standalone) {
                     if (filter && !v.title.toLowerCase().includes(lowerFilter)) continue;
                     renders.push({ isShow: false, title: v.title, video: v, repr: v });
                 }
             }
-        } else {
+        } else if (currentShowView && currentSeasonView === null) {
             renders.push({ isBack: true });
             let episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show && v.show.toLowerCase() === currentShowView.toLowerCase());
-            episodes.sort((a,b) => (a.season - b.season) || (a.episode - b.episode));
+            
+            const seasonMap = new Map();
+            for (const ep of episodes) {
+                const sNum = parseInt(ep.season) || 1;
+                if (!seasonMap.has(sNum)) seasonMap.set(sNum, []);
+                seasonMap.get(sNum).push(ep);
+            }
+            
+            const seasons = [...seasonMap.keys()].sort((a,b) => a - b);
+            for (const sNum of seasons) {
+                const sEps = seasonMap.get(sNum);
+                sEps.sort((a,b) => (a.episode || 0) - (b.episode || 0));
+                
+                // Represent the season with an episode's cover art, prioritizing showPosters
+                let repr = sEps.find(e => e.showPoster) || sEps.find(e => e.poster) || sEps[0];
+                
+                renders.push({ 
+                    isSeason: true, 
+                    seasonNum: sNum, 
+                    title: `Season ${sNum}`, 
+                    episodes: sEps,
+                    repr: repr
+                });
+            }
+        } else if (currentShowView && currentSeasonView !== null) {
+            renders.push({ isSeasonBack: true });
+            let episodes = videoLibrary.videos.filter(v => v.type === 'tv' && v.show && v.show.toLowerCase() === currentShowView.toLowerCase() && (parseInt(v.season) || 1) === currentSeasonView);
+            episodes.sort((a,b) => (a.episode || 0) - (b.episode || 0));
             for (const ep of episodes) {
                 const fTitle = ep.title.replace(/Chuck(?:\s*0?\d{1,2}x\d{1,2})?\s*/i, '').trim();
                 const titleStr = `S${String(ep.season).padStart(2,'0')}E${String(ep.episode).padStart(2,'0')} - ${fTitle}`;
@@ -276,14 +322,27 @@
                         <div class="library-card-title" style="color:var(--text-dim); text-align:center;">Back to Library</div>
                     </div>
                 `;
-                card.addEventListener('click', () => { currentShowView = null; renderVideoGrid(videoSearch.value); });
+                card.addEventListener('click', () => { currentShowView = null; currentSeasonView = null; renderVideoGrid(videoSearch.value); });
+                videoGrid.appendChild(card);
+                continue;
+            }
+            if (item.isSeasonBack) {
+                card.innerHTML = `
+                    <div class="library-card-art video-card-art" style="display:flex; align-items:center; justify-content:center; background:var(--background-lighter);">
+                        <span style="font-size:2em; color:var(--text-dim);">←</span>
+                    </div>
+                    <div class="library-card-info" style="justify-content:center;">
+                        <div class="library-card-title" style="color:var(--text-dim); text-align:center;">Back to Seasons</div>
+                    </div>
+                `;
+                card.addEventListener('click', () => { currentSeasonView = null; renderVideoGrid(''); });
                 videoGrid.appendChild(card);
                 continue;
             }
 
             let thumbHtml = '<span class="library-card-fallback">🎬</span>';
             try {
-                if (item.isShow && item.repr.showPoster) {
+                if ((item.isShow || item.isSeason) && item.repr.showPoster) {
                      thumbHtml = `<img src="${encodeURI(toFileUrl(item.repr.showPoster))}" onerror="this.style.display='none'">`;
                 } else if (item.repr.poster) {
                      thumbHtml = `<img src="${encodeURI(toFileUrl(item.repr.poster))}" onerror="this.style.display='none'">`;
@@ -302,6 +361,47 @@
                     seasonText = `Seasons ${seasons[0]}-${seasons[seasons.length-1]}`;
                 }
 
+                let upNextText = "";
+                let highestEngagedIdx = -1;
+                
+                // Find the latest chronological episode the user has engaged with
+                for (let j = 0; j < item.episodes.length; j++) {
+                    const pos = getVideoPosition(item.episodes[j].id);
+                    if (pos && pos.currentTime > 10) {
+                        highestEngagedIdx = j;
+                    }
+                }
+
+                if (highestEngagedIdx === -1) {
+                    // Never watched anything, start from beginning
+                    if (item.episodes.length > 0) {
+                        const ep = item.episodes[0];
+                        let s = ep.season ? `S${String(ep.season).padStart(2, '0')}` : '';
+                        let e = `E${String(ep.episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Up Next: ${s}${e}</div>`;
+                    }
+                } else {
+                    const latestEp = item.episodes[highestEngagedIdx];
+                    const pos = getVideoPosition(latestEp.id);
+                    const isWatched = latestEp.duration > 0 && pos && pos.currentTime >= latestEp.duration - 5;
+                    
+                    if (!isWatched) {
+                        // Currently watching this one
+                        let s = latestEp.season ? `S${String(latestEp.season).padStart(2, '0')}` : '';
+                        let e = `E${String(latestEp.episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Continue: ${s}${e}</div>`;
+                    } else if (highestEngagedIdx + 1 < item.episodes.length) {
+                        // Finished it, up next is the following one
+                        const nextEp = item.episodes[highestEngagedIdx + 1];
+                        let s = nextEp.season ? `S${String(nextEp.season).padStart(2, '0')}` : '';
+                        let e = `E${String(nextEp.episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Up Next: ${s}${e}</div>`;
+                    } else {
+                        // Finished the entire series
+                        upNextText = `<div style="font-size:12px; color:var(--text-dim); margin-top:4px;">✓ Complete</div>`;
+                    }
+                }
+
                 card.innerHTML = `
                     <div class="library-card-art video-card-art">
                         ${thumbHtml}
@@ -310,9 +410,54 @@
                     <div class="library-card-info">
                         <div class="library-card-title">${item.title}</div>
                         <div class="library-card-meta">${seasonText}</div>
+                        ${upNextText}
                     </div>
                 `;
-                card.addEventListener('click', () => { currentShowView = item.title; renderVideoGrid(''); });
+                card.addEventListener('click', () => { currentShowView = item.title; currentSeasonView = null; renderVideoGrid(''); });
+            } else if (item.isSeason) {
+                let upNextText = "";
+                let highestEngagedIdx = -1;
+                
+                for (let j = 0; j < item.episodes.length; j++) {
+                    const pos = getVideoPosition(item.episodes[j].id);
+                    if (pos && pos.currentTime > 10) {
+                        highestEngagedIdx = j;
+                    }
+                }
+
+                if (highestEngagedIdx === -1) {
+                    if (item.episodes.length > 0) {
+                        let e = `E${String(item.episodes[0].episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Up Next: ${e}</div>`;
+                    }
+                } else {
+                    const latestEp = item.episodes[highestEngagedIdx];
+                    const pos = getVideoPosition(latestEp.id);
+                    const isWatched = latestEp.duration > 0 && pos && pos.currentTime >= latestEp.duration - 5;
+                    
+                    if (!isWatched) {
+                        let e = `E${String(latestEp.episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Continue: ${e}</div>`;
+                    } else if (highestEngagedIdx + 1 < item.episodes.length) {
+                        const nextEp = item.episodes[highestEngagedIdx + 1];
+                        let e = `E${String(nextEp.episode || 1).padStart(2, '0')}`;
+                        upNextText = `<div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:bold;">▶ Up Next: ${e}</div>`;
+                    } else {
+                        upNextText = `<div style="font-size:12px; color:var(--text-dim); margin-top:4px;">✓ Complete</div>`;
+                    }
+                }
+
+                card.innerHTML = `
+                    <div class="library-card-art video-card-art">
+                        ${thumbHtml}
+                        <div class="video-duration-badge" style="background:var(--gold); color:#000;">${item.episodes.length} Episodes</div>
+                    </div>
+                    <div class="library-card-info">
+                        <div class="library-card-title">${item.title}</div>
+                        ${upNextText}
+                    </div>
+                `;
+                card.addEventListener('click', () => { currentSeasonView = item.seasonNum; renderVideoGrid(''); });
             } else {
                 const video = item.video;
                 const savedPos = getVideoPosition(video.id);
@@ -367,7 +512,9 @@
         newVideo.preload = 'auto';
         newVideo.style.position = 'relative';
         newVideo.style.zIndex = '2';
-        newVideo.style.width = '100%';
+        newVideo.style.width = 'auto';
+        newVideo.style.height = 'auto';
+        newVideo.style.maxWidth = '100%';
         newVideo.style.maxHeight = '100%';
         newVideo.style.objectFit = 'contain';
         newVideo.style.boxShadow = '0 0 40px rgba(0,0,0,0.8)';
@@ -378,10 +525,19 @@
         const ambilightCanvas = document.getElementById('video-ambilight');
         const ambilightCtx = ambilightCanvas ? ambilightCanvas.getContext('2d') : null;
         
-        function renderAmbilight() {
-            if (!videoElement.paused && !videoElement.ended && ambilightCtx) {
-                // Downscale draw for performance (keeps massive blur entirely on GPU)
-                ambilightCtx.drawImage(videoElement, 0, 0, ambilightCanvas.width, ambilightCanvas.height);
+        let lastAmbilightDraw = 0;
+        function renderAmbilight(timestamp) {
+            if (!videoElement.paused && !videoElement.ended && ambilightCtx && videoElement.videoWidth) {
+                // Throttle to ~20 FPS (50ms) to prevent GPU texture upload from starving the video decoder
+                if (timestamp - lastAmbilightDraw > 50) {
+                    // Crop out the outer 12.5% on all sides to defeat baked-in letterboxing/pillarboxing
+                    const sX = videoElement.videoWidth * 0.125;
+                    const sY = videoElement.videoHeight * 0.125;
+                    const sW = videoElement.videoWidth * 0.75;
+                    const sH = videoElement.videoHeight * 0.75;
+                    ambilightCtx.drawImage(videoElement, sX, sY, sW, sH, 0, 0, ambilightCanvas.width, ambilightCanvas.height);
+                    lastAmbilightDraw = timestamp;
+                }
             }
             ambilightRafId = requestAnimationFrame(renderAmbilight);
         }
@@ -578,28 +734,65 @@
                     saveVideoPosition(video.id, 0);
                 } else {
                     videoElement.currentTime = savedPos.currentTime;
+                    
+                    // Welcome Back Toast Notification
+                    const toast = document.createElement('div');
+                    toast.className = 'welcome-toast';
+                    toast.textContent = `Welcome Back — Resuming at ${formatTime(savedPos.currentTime)}`;
+                    (document.getElementById('video-player-area') || videoPlayerEl).appendChild(toast);
+                    
+                    // Auto-hide toast
+                    setTimeout(() => {
+                        toast.classList.add('fade-out');
+                        setTimeout(() => toast.remove(), 600);
+                    }, 4000);
                 }
             }
-            videoElement.play().catch(console.error);
+            videoElement.play().then(() => {
+                resetVideoIdleTimer(); // Start idle tracking once playing
+            }).catch(console.error);
         });
 
         // ── Auto-Extract & Load Internal Perfectly Synced Subs ──
         if (window.omega && window.omega.video && window.omega.video.extractInternalSubtitles) {
             window.omega.video.extractInternalSubtitles(video.path).then(res => {
-                if (res && res.success && res.path) {
-                    console.log("[SovereignMedia] Auto-loaded internal MKV subtitle:", res.path);
+                if (res && res.success && res.text) {
                     const trackId = 'internal-sub-track';
                     let oldTrack = document.getElementById(trackId);
                     if (oldTrack) oldTrack.remove();
                     
+                    // Strip BOM if present
+                    let vttText = res.text;
+                    if (vttText.charCodeAt(0) === 0xFEFF) vttText = vttText.slice(1);
+                    
+                    const blob = new Blob([vttText], { type: 'text/vtt' });
+                    if (window.currentInternalSubtitleUrl) URL.revokeObjectURL(window.currentInternalSubtitleUrl);
+                    window.currentInternalSubtitleUrl = URL.createObjectURL(blob);
+                    
                     const track = document.createElement('track');
                     track.id = trackId;
-                    track.src = toFileUrl(res.path);
+                    track.src = window.currentInternalSubtitleUrl;
                     track.kind = 'subtitles';
                     track.srclang = 'en';
                     track.label = 'Internal (Perfect Sync)';
                     track.default = true;
                     videoElement.appendChild(track);
+                    
+                    // Force the native Chromium player to show the dynamically appended track
+                    track.addEventListener('load', () => {
+                        if (track.track) track.track.mode = 'showing';
+                    });
+                    track.addEventListener('error', (e) => {
+                        console.error('[Subtitle] Track load error:', e);
+                    });
+                    setTimeout(() => {
+                        if (track.track) track.track.mode = 'showing';
+                        else if (videoElement.textTracks && videoElement.textTracks.length > 0) {
+                            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                                videoElement.textTracks[i].mode = 'showing';
+                            }
+                        }
+                    }, 500);
                     
                     const subBtn = document.getElementById('video-subtitle-btn');
                     if (subBtn) {
@@ -691,6 +884,7 @@
             reader.onload = (ev) => {
                 let text = ev.target.result;
                 // Convert SRT to VTT if needed
+                if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
                 if (!text.trim().startsWith('WEBVTT')) {
                     text = 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
                 }
@@ -713,9 +907,17 @@
                 videoElement.appendChild(track);
                 
                 // Force track to show
-                if (videoElement.textTracks && videoElement.textTracks.length > 0) {
-                    videoElement.textTracks[0].mode = 'showing';
-                }
+                track.addEventListener('load', () => {
+                    if (track.track) track.track.mode = 'showing';
+                });
+                setTimeout(() => {
+                    if (track.track) track.track.mode = 'showing';
+                    else if (videoElement.textTracks && videoElement.textTracks.length > 0) {
+                        for (let i = 0; i < videoElement.textTracks.length; i++) {
+                            videoElement.textTracks[i].mode = 'showing';
+                        }
+                    }
+                }, 250);
                 
                 subBtn.textContent = "[cc] " + file.name;
                 subBtn.style.background = 'var(--gold)';
@@ -727,6 +929,9 @@
 
     // Back to library
     videoPlayerBack.addEventListener('click', () => {
+        if (currentVideoData && videoElement) {
+            saveVideoPosition(currentVideoData.id, videoElement.currentTime);
+        }
         videoPlayerEl.classList.add('hidden');
         videoLibraryEl.classList.remove('hidden');
         if (videoElement) {

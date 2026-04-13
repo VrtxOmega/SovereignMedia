@@ -5,11 +5,19 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { setupRemote } = require('./mobile_remote.js');
 
+// Disable Windows Media Session notifications to prevent auto-hide taskbar popping up
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService');
+app.setAppUserModelId(process.execPath);
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
     process.exit(0);
 }
+
+app.on('browser-window-created', (e, win) => {
+    win.flashFrame(false); // Disable taskbar flash
+});
 
 let mainWindow;
 let tray = null;
@@ -70,6 +78,23 @@ function createWindow() {
 
     mainWindow.loadFile('index.html');
 
+    // Fix for Windows Auto-Hide Taskbar popping up during HTML5 video fullscreen
+    mainWindow.webContents.on('enter-html-full-screen', () => {
+        mainWindow.setKiosk(true); // Replaces setFullScreen to enforce absolute DirectX-level top layer
+        mainWindow.setSkipTaskbar(true); // Removes edge detection bounds from taskbar
+        setTimeout(() => {
+            if (mainWindow.isKiosk()) {
+                mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            }
+        }, 50);
+    });
+    
+    mainWindow.webContents.on('leave-html-full-screen', () => {
+        mainWindow.setAlwaysOnTop(false);
+        mainWindow.setSkipTaskbar(false);
+        mainWindow.setKiosk(false);
+    });
+
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
             event.preventDefault();
@@ -109,6 +134,16 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
+    const { session } = require('electron');
+    // Suppress all HTML5 notifications from the renderer
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        if (permission === 'notifications') {
+            callback(false);
+        } else {
+            callback(true);
+        }
+    });
+
     createWindow();
     createTray();
     
@@ -608,8 +643,12 @@ async function scanVideoLibrary(startFolder) {
 
                         let baseName = item.name.replace(ext, '');
                         // tv match on the original name
-                        const tvMatch = baseName.match(/(?:\b|_)S(\d{1,2})E(\d{1,2})(?:\b|_)/i) || baseName.match(/(?:\b|_)0?(\d{1,2})x(\d{1,2})(?:\b|_)/i) || baseName.match(/S(\d{1,2})E(\d{1,2})/i);
-                        
+                        let tvMatch = baseName.match(/(?:\b|_)S(\d{1,2})E(\d{1,2})(?:\b|_)/i) || baseName.match(/(?:\b|_)0?(\d{1,2})x(\d{1,2})(?:\b|_)/i) || baseName.match(/S(\d{1,2})E(\d{1,2})/i);
+                        let epOnlyMatch = null;
+                        if (!tvMatch) {
+                            epOnlyMatch = baseName.match(/(?:\b|_)E(\d{1,2})(?:\b|_)/i);
+                        }
+
                         let title = baseName.replace(/_/g, ' ');
 
                         if (tvMatch) {
@@ -618,6 +657,20 @@ async function scanVideoLibrary(startFolder) {
                             episodeNum = parseInt(tvMatch[2], 10);
                             
                             showName = title.substring(0, tvMatch.index).trim();
+                            if (showName.endsWith('-')) showName = showName.slice(0, -1).trim();
+                            
+                            if (!showName || showName.length < 2) {
+                                showName = path.basename(dir);
+                                if (showName.toLowerCase().includes('season')) {
+                                    showName = path.basename(path.dirname(dir));
+                                }
+                            }
+                        } else if (epOnlyMatch) {
+                            vidType = "tv";
+                            seasonNum = 1;
+                            episodeNum = parseInt(epOnlyMatch[1], 10);
+
+                            showName = title.substring(0, epOnlyMatch.index).trim();
                             if (showName.endsWith('-')) showName = showName.slice(0, -1).trim();
                             
                             if (!showName || showName.length < 2) {
@@ -710,6 +763,26 @@ async function scanVideoLibrary(startFolder) {
 
     const libraryData = { path: startFolder, videos };
     fs.writeFileSync(videoDataPath, JSON.stringify(libraryData), 'utf8');
+    
+    // Automatically fetch missing cover art using the scraping python script
+    try {
+        await new Promise((resolve) => {
+            const fetchScript = path.join(__dirname, 'fetch_cover_art.py');
+            if (fs.existsSync(fetchScript)) {
+                execFile('python', [fetchScript], { timeout: 120000, cwd: __dirname }, (err) => {
+                    if (err) console.error("Cover art fetcher failed:", err.message);
+                    resolve();
+                });
+            } else {
+                resolve();
+            }
+        });
+        // Reload JSON since the python script modifies it directly
+        return JSON.parse(fs.readFileSync(videoDataPath, 'utf8'));
+    } catch (e) {
+        console.error("Cover art integration error:", e);
+    }
+    
     return libraryData;
 }
 
@@ -719,10 +792,10 @@ ipcMain.handle('video:getThumbnail', async (_event, filePath) => {
     if (fs.existsSync(thumbPath)) {
         return thumbPath.replace(/\\/g, '/');
     }
-    // Generate thumbnail with ffmpeg
+    // Generate thumbnail with ffmpeg at the 2 minute mark to avoid black studio fade-ins
     return new Promise((resolve) => {
         execFile('ffmpeg', [
-            '-i', filePath, '-ss', '00:00:05',
+            '-i', filePath, '-ss', '00:02:00',
             '-vframes', '1', '-q:v', '4',
             '-vf', 'scale=320:-1',
             thumbPath
@@ -751,22 +824,64 @@ ipcMain.handle('video:autoDownloadSubtitles', async (_event, filePath) => {
 
 ipcMain.handle('video:extractInternalSubtitles', async (_event, filePath) => {
     return new Promise((resolve) => {
-        const outPath = filePath.substring(0, filePath.lastIndexOf('.')) + '.internal.vtt';
-        if (fs.existsSync(outPath)) {
-            return resolve({ success: true, path: outPath.replace(/\\/g, '/') });
+        const basePath = filePath.substring(0, filePath.lastIndexOf('.'));
+        const internalVtt = basePath + '.internal.vtt';
+        const vttPath = basePath + '.vtt';
+        const enSrtPath = basePath + '.en.srt';
+        const srtPath = basePath + '.srt';
+
+        // 1. Check native WebVTT sidecars
+        if (fs.existsSync(vttPath)) {
+            const text = fs.readFileSync(vttPath, 'utf8');
+            return resolve({ success: true, text });
+        }
+        if (fs.existsSync(internalVtt)) {
+            const text = fs.readFileSync(internalVtt, 'utf8');
+            return resolve({ success: true, text });
+        }
+
+        // 2. Check SRT sidecars and convert to WebVTT cleanly stripping BOM
+        const convertSrtToVtt = (src) => {
+            try {
+                let text = fs.readFileSync(src, 'utf8');
+                if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // Strip BOM
+                if (!text.trim().startsWith('WEBVTT')) {
+                    text = 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+                }
+                const newVttPath = basePath + '.vtt';
+                fs.writeFileSync(newVttPath, text, 'utf8');
+                return text;
+            } catch (e) {
+                return null;
+            }
+        };
+
+        if (fs.existsSync(enSrtPath)) {
+            const vttText = convertSrtToVtt(enSrtPath);
+            if (vttText) return resolve({ success: true, text: vttText });
+        }
+        if (fs.existsSync(srtPath)) {
+            const vttText = convertSrtToVtt(srtPath);
+            if (vttText) return resolve({ success: true, text: vttText });
         }
         
+        // 3. Fallback to FFmpeg internal subtitle extraction
         execFile('ffmpeg', [
             '-y', '-i', filePath, 
             '-map', '0:s:0', 
             '-f', 'webvtt', 
-            outPath
+            internalVtt
         ], { timeout: 15000 }, (err, stdout, stderr) => {
             if (err) {
                 console.error("No internal sub found or extraction failed:", err.message);
                 resolve({ success: false });
             } else {
-                resolve({ success: true, path: outPath.replace(/\\/g, '/') });
+                try {
+                    const extractedText = fs.readFileSync(internalVtt, 'utf8');
+                    resolve({ success: true, text: extractedText });
+                } catch(e) {
+                    resolve({ success: false });
+                }
             }
         });
     });
@@ -791,7 +906,9 @@ ipcMain.handle('video:optimizeLibrary', async () => {
 
     for (const video of mkvFiles) {
         const srcPath = video.path;
-        const mp4Path = srcPath.substring(0, srcPath.lastIndexOf('.')) + '.mp4';
+        const basePath = srcPath.substring(0, srcPath.lastIndexOf('.'));
+        const mp4Path = basePath + '.mp4';
+        const internalVtt = basePath + '.internal.vtt';
 
         // Skip if MP4 already exists alongside the MKV
         if (fs.existsSync(mp4Path)) {
@@ -801,6 +918,24 @@ ipcMain.handle('video:optimizeLibrary', async () => {
         }
 
         try {
+            // STEP 1: Extract subtitle stream to .internal.vtt BEFORE remux
+            // This preserves subtitles that would otherwise be lost in MP4 container
+            if (!fs.existsSync(internalVtt)) {
+                await new Promise((resolve) => {
+                    execFile('ffmpeg', [
+                        '-y', '-i', srcPath,
+                        '-map', '0:s:0',
+                        '-f', 'webvtt',
+                        internalVtt
+                    ], { timeout: 30000 }, (err) => {
+                        // Non-fatal: not all MKVs have subtitle streams
+                        if (err) console.log(`[Optimizer] No subtitle stream in ${path.basename(srcPath)} (expected for some files)`);
+                        resolve();
+                    });
+                });
+            }
+
+            // STEP 2: Remux video + audio to MP4
             await new Promise((resolve, reject) => {
                 execFile('ffmpeg', [
                     '-y', '-i', srcPath,
