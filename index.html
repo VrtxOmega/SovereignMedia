@@ -250,6 +250,14 @@
                             <button class="book-ctrl-btn" id="video-sub-size-down" title="Subtitle Size Down" style="padding: 2px 6px; font-size: 11px;">A-</button>
                             <button class="book-ctrl-btn" id="video-sub-size-up" title="Subtitle Size Up" style="padding: 2px 6px; font-size: 11px;">A+</button>
                         </div>
+                        <!-- Subtitle Sync Slider -->
+                        <div id="video-sub-sync-control" class="video-sub-sync-control" title="Subtitle Sync Offset">
+                            <label class="sub-sync-label" for="video-sub-sync-slider">SYNC</label>
+                            <button id="video-sub-sync-minus" class="sub-sync-step-btn" title="−50ms">−</button>
+                            <input type="range" id="video-sub-sync-slider" min="-5000" max="5000" step="50" value="0" class="sub-sync-slider" />
+                            <button id="video-sub-sync-plus" class="sub-sync-step-btn" title="+50ms">+</button>
+                            <span id="video-sub-sync-value" class="sub-sync-value">0ms</span>
+                        </div>
                         <button id="video-auto-subtitle-btn" title="Auto-Download Subtitles" style="padding: 6px 12px; font-size: 11px; font-family: var(--font-ui); font-weight: 600; background: transparent; border: 1px solid var(--gold); color: var(--gold); opacity: 0.8; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap;">↓ Auto-Fetch</button>
                         <button id="video-subtitle-btn" title="Add Subtitles" style="padding: 6px 12px; font-size: 11px; font-family: var(--font-ui); font-weight: 600; background: rgba(255,215,0,0.1); border: 1px solid var(--gold); color: var(--gold); border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap;">[cc] Subs</button>
                         <input type="file" id="video-subtitle-input" accept=".vtt,.srt" style="display: none;" />

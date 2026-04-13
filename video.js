@@ -687,6 +687,15 @@
         videoPlayerEl.classList.remove('hidden');
         videoPlayerTitle.textContent = video.title;
 
+        // Reset sync offset for new video
+        if (typeof window._currentSubtitleOffsetMs !== 'undefined') {
+            window._currentSubtitleOffsetMs = 0;
+            const syncSlider = document.getElementById('video-sub-sync-slider');
+            const syncValue = document.getElementById('video-sub-sync-value');
+            if (syncSlider) syncSlider.value = 0;
+            if (syncValue) { syncValue.textContent = '0ms'; syncValue.classList.remove('offset-active'); }
+        }
+
         if (!seamless) {
             rebuildVideoPlayer();
         } else {
@@ -972,6 +981,84 @@
     }
     
     applySubSize();
+
+    // ── Subtitle Sync Controller ──────────────────────────────────────────
+    const syncSlider = document.getElementById('video-sub-sync-slider');
+    const syncMinus = document.getElementById('video-sub-sync-minus');
+    const syncPlus = document.getElementById('video-sub-sync-plus');
+    const syncValue = document.getElementById('video-sub-sync-value');
+    
+    window._currentSubtitleOffsetMs = 0;
+
+    function updateSyncDisplay() {
+        if (!syncValue || !syncSlider) return;
+        let val = parseInt(syncSlider.value) || 0;
+        if (val > 0) {
+            syncValue.textContent = '+' + val + 'ms';
+            syncValue.classList.add('offset-active');
+        } else if (val < 0) {
+            syncValue.textContent = val + 'ms';
+            syncValue.classList.add('offset-active');
+        } else {
+            syncValue.textContent = '0ms';
+            syncValue.classList.remove('offset-active');
+        }
+    }
+
+    window._applySubtitleOffset = function(newOffsetMs) {
+        if (!videoElement || !videoElement.textTracks) return;
+        let deltaMs = newOffsetMs - window._currentSubtitleOffsetMs;
+        if (deltaMs === 0) return;
+        
+        // Find active track
+        let activeTrack = null;
+        for (let i = 0; i < videoElement.textTracks.length; i++) {
+            if (videoElement.textTracks[i].mode === 'showing' || videoElement.textTracks[i].mode === 'hidden') {
+                activeTrack = videoElement.textTracks[i];
+                break;
+            }
+        }
+        
+        if (activeTrack && activeTrack.cues && activeTrack.cues.length > 0) {
+            for (let j = 0; j < activeTrack.cues.length; j++) {
+                activeTrack.cues[j].startTime += (deltaMs / 1000);
+                activeTrack.cues[j].endTime += (deltaMs / 1000);
+            }
+        }
+        window._currentSubtitleOffsetMs = newOffsetMs;
+        updateSyncDisplay();
+    };
+
+    if (syncSlider) {
+        syncSlider.addEventListener('input', (e) => {
+            let val = parseInt(e.target.value) || 0;
+            window._applySubtitleOffset(val);
+        });
+        syncSlider.addEventListener('dblclick', () => {
+            syncSlider.value = 0;
+            window._applySubtitleOffset(0);
+        });
+    }
+    if (syncMinus) {
+        syncMinus.addEventListener('click', () => {
+            if (syncSlider) {
+                let current = parseInt(syncSlider.value) || 0;
+                let next = Math.max(parseInt(syncSlider.min), current - 50);
+                syncSlider.value = next;
+                window._applySubtitleOffset(next);
+            }
+        });
+    }
+    if (syncPlus) {
+        syncPlus.addEventListener('click', () => {
+            if (syncSlider) {
+                let current = parseInt(syncSlider.value) || 0;
+                let next = Math.min(parseInt(syncSlider.max), current + 50);
+                syncSlider.value = next;
+                window._applySubtitleOffset(next);
+            }
+        });
+    }
 
     // ── Optimize Library Button ───────────────────────────────────────────
     const optimizeBtn = document.getElementById('video-optimize-btn');

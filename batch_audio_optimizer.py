@@ -58,7 +58,7 @@ def run():
             "ffmpeg", "-y", "-i", fpath,
             "-map", "0:v", "-map", "0:a", "-map", "0:s?",
             "-c:v", "copy",
-            "-c:a", "aac", "-ac", "2", "-b:a", "256k",
+            "-c:a", "aac", "-b:a", "256k",
             "-c:s", "copy",
             out_name
         ]
