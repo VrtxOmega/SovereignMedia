@@ -2,7 +2,26 @@
 
 **Operator-grade all-in-one desktop media platform for the VERITAS & Sovereign Ecosystem.**
 
-![Electron](https://img.shields.io/badge/Electron-30.x-47848F?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-C5A365?style=flat-square) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square) ![Status](https://img.shields.io/badge/Status-Stable-gold?style=flat-square)
+![Sovereign Media](https://img.shields.io/badge/Electron-31.x-47848F?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-gold?style=flat-square)
+
+<br/>
+
+<div align="center">
+  <img src="assets/sovereignmedia_audio.png" alt="Sovereign Media - Audio Library" width="800" />
+  <br/>
+  <sup><em>Sovereign Media Audio Library &mdash; VERITAS gold-and-obsidian aesthetic</em></sup>
+  <br/><br/>
+  <img src="assets/sovereignmedia_books.png" alt="Sovereign Media - EPUB Library" width="800" />
+  <br/>
+  <sup><em>Sovereign Media eBook Library &mdash; High-fidelity typography controls</em></sup>
+  <br/><br/>
+  <img src="assets/sovereignmedia_video.png" alt="Sovereign Media - Video Library" width="800" />
+  <br/>
+  <sup><em>Sovereign Media Video Library &mdash; Zero-dependency native playback</em></sup>
+</div>
+<br/>
+
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square) ![Status](https://img.shields.io/badge/Status-Stable-gold?style=flat-square)
 
 ---
 
