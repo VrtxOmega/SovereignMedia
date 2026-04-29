@@ -1,0 +1,302 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-04-29T21:04:06.006Z",
+  "target": {
+    "name": "sovereign-media",
+    "repo": "/mnt/c/Veritas_Lab/SovereignMedia",
+    "commitHash": "6d79e9636bbe03b544a7727ce8728e70bb7ae73b",
+    "branch": "master"
+  },
+  "environment": {
+    "nodeVersion": "v22.14.0",
+    "os": "linux",
+    "arch": "x64",
+    "ci": false
+  },
+  "dependencies": [
+    {
+      "name": "adm-zip",
+      "version": "0.5.17",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/adm-zip",
+      "integrity": "7a2b15cf80592c1c",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "electron",
+      "version": "30.0.0",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/electron",
+      "integrity": "380195b93df3f3f9",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "epubjs",
+      "version": "0.3.93",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/epubjs",
+      "integrity": "00018967670a35f1",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "express",
+      "version": "5.2.1",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/express",
+      "integrity": "2980b885bad92f75",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "localtunnel",
+      "version": "2.0.2",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/localtunnel",
+      "integrity": "c676bc9b1a8b4f14",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "music-metadata",
+      "version": "11.12.3",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/music-metadata",
+      "integrity": "773d3d017708b1a4",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "qrcode",
+      "version": "1.5.4",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/qrcode",
+      "integrity": "cbe26d7282c802f4",
+      "suspicious": false,
+      "riskScore": 0.5
+    },
+    {
+      "name": "socket.io",
+      "version": "4.8.3",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/socket.io",
+      "integrity": "1508f8ace1f6faf5",
+      "suspicious": false,
+      "riskScore": 0.1
+    },
+    {
+      "name": "video.js",
+      "version": "8.23.7",
+      "resolved": "/mnt/c/Veritas_Lab/SovereignMedia/node_modules/video.js",
+      "integrity": "90062d1b8d0b8aa3",
+      "suspicious": false,
+      "riskScore": 0.1
+    }
+  ],
+  "gates": [
+    {
+      "gate": "GIT_INTEGRITY",
+      "status": "FAIL",
+      "evidence": "Modified files: 19",
+      "durationMs": 79
+    },
+    {
+      "gate": "LOCKFILE",
+      "status": "PASS",
+      "evidence": "package-lock.json present",
+      "durationMs": 1
+    },
+    {
+      "gate": "DETERMINISTIC_BUILD",
+      "status": "INCONCLUSIVE",
+      "evidence": "No build command detected",
+      "durationMs": 0
+    },
+    {
+      "gate": "TEST_PASS",
+      "status": "FAIL",
+      "evidence": "Tests failed: npm error Missing script: \"test\"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run\nnpm error A complete log of this run can be found in: /home/veritas/.npm/_logs/2026-04-29T21_04_",
+      "durationMs": 137
+    },
+    {
+      "gate": "LINT",
+      "status": "PASS",
+      "evidence": "npx passed",
+      "durationMs": 3143
+    }
+  ],
+  "adversarial": {
+    "totalPackages": 9,
+    "suspiciousPackages": 1,
+    "probes": [
+      {
+        "package": "adm-zip",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "adm-zip",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 0.5.17"
+      },
+      {
+        "package": "adm-zip",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 7a2b15cf80592c1c"
+      },
+      {
+        "package": "electron",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "electron",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 30.0.0"
+      },
+      {
+        "package": "electron",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 380195b93df3f3f9"
+      },
+      {
+        "package": "epubjs",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "epubjs",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 0.3.93"
+      },
+      {
+        "package": "epubjs",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 00018967670a35f1"
+      },
+      {
+        "package": "express",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "express",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 5.2.1"
+      },
+      {
+        "package": "express",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 2980b885bad92f75"
+      },
+      {
+        "package": "localtunnel",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "localtunnel",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 2.0.2"
+      },
+      {
+        "package": "localtunnel",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: c676bc9b1a8b4f14"
+      },
+      {
+        "package": "music-metadata",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "music-metadata",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 11.12.3"
+      },
+      {
+        "package": "music-metadata",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 773d3d017708b1a4"
+      },
+      {
+        "package": "qrcode",
+        "probe": "TYPO_SQUATTING",
+        "result": "WARN",
+        "detail": "Name matches known suspicious packages"
+      },
+      {
+        "package": "qrcode",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 1.5.4"
+      },
+      {
+        "package": "qrcode",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: cbe26d7282c802f4"
+      },
+      {
+        "package": "socket.io",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "socket.io",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 4.8.3"
+      },
+      {
+        "package": "socket.io",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 1508f8ace1f6faf5"
+      },
+      {
+        "package": "video.js",
+        "probe": "TYPO_SQUATTING",
+        "result": "PASS",
+        "detail": "Name heuristic clean"
+      },
+      {
+        "package": "video.js",
+        "probe": "VERSION_ANOMALY",
+        "result": "PASS",
+        "detail": "Pinned: 8.23.7"
+      },
+      {
+        "package": "video.js",
+        "probe": "METADATA_INTEGRITY",
+        "result": "PASS",
+        "detail": "Hash: 90062d1b8d0b8aa3"
+      },
+      {
+        "package": "system",
+        "probe": "KIMI_REASONING",
+        "result": "INCONCLUSIVE",
+        "detail": "OLLAMA_CLOUD_API_KEY is not set. Skipping Kimi adversarial analysis."
+      }
+    ],
+    "overallRisk": 0.016666666666666666
+  },
+  "seal": {
+    "chainHash": "6e9f3d05a83e925eeb93ab72bcceadf8b7b536404cdbe0e05ea48f15742d6e15",
+    "sequence": 203
+  },
+  "signature": "09dd55197f2358e8207b2ca0e53eb8d63fb2f03dbe6f5ef2b520171cb013a792"
+}
